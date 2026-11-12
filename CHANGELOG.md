@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.1
+
+- Fixed: with the HUD hidden, the controller's Y button no longer opens the game's own inventory; it cycles the companion's
+  tabs. The game's page UI owns the open state, so the inventory is closed through `GUIPageIcons.Close`.
+- Fixed: a mod file regression that made every state request fail (`readChest is not defined`) in the first 1.0.0 upload.
+- Plain dirt / stone caves now use the texture pair the game itself uses for the current underground style.
+- Town NPC heads and boss icons (with health) on the map, the game's interface sounds, boss / NPC data in the mod.
+- Build script is portable (`JAVA_HOME`, `ANDROID_SDK_ROOT`).
+
+Not verified on a device yet: chest window, interface sounds, boss icons on the map. Cave textures for biomes other than
+plain dirt are a best guess.
+
 ## 1.0.0 — first public release
 
 - Companion app for dual-screen Android devices: inventory (drag, swap, stack, split, trash slot, sort), item window with

@@ -4,5 +4,5 @@
   "guid": "461e42de-9805-4642-b63b-52284075b065",
   "descriptionEnglish": "Live game state for the Terraduo Companion app on the second screen: inventory, equipment, crafting, chests, buffs, map and the backgrounds the game draws. Single-player only.",
   "descriptionRussian": "Живое состояние игры для приложения Terraduo Companion на втором экране: инвентарь, снаряжение, крафт, сундуки, баффы, карта и фоны, которые рисует игра. Только одиночная игра.",
-  "version": 5
+  "version": 6
 }
