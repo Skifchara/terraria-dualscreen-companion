@@ -3,6 +3,10 @@
 ## Unreleased
 
 - New People tab: team (colour) and PvP toggle, town NPCs with a housed / homeless status, other players.
+- Housing: each town NPC has "Check room" (the game's own room check at your position, drawn on the main screen, with the
+  result and what is missing on the People tab) and "Move in".
+- Fixed: a tap sound could swallow the command that followed it (armor sets, team, PvP, sort); actions now wait in a short
+  queue.
 - Equipment tab shows your total defense and the three armour sets (equipment loadouts) with one-tap switching.
 
 ## 1.0.4

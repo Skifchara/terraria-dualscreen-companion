@@ -26,7 +26,8 @@ public final class TlProActivity extends Activity {
     private final Runnable poll = this::poll;
     private ExecutorService worker;
     private TerraPanel panel;
-    private JSONObject nextAction;
+    // actions wait in a short queue: a tap sound must never swallow the real command that follows it
+    private final java.util.ArrayDeque<JSONObject> pending = new java.util.ArrayDeque<>();
     private boolean awaitingReply;
 
     @Override protected void onCreate(Bundle state) {
@@ -80,7 +81,7 @@ public final class TlProActivity extends Activity {
         if (worker != null) worker.shutdownNow();
         worker = null;
         awaitingReply = false;
-        nextAction = null;
+        pending.clear();
         super.onPause();
     }
 
@@ -91,8 +92,11 @@ public final class TlProActivity extends Activity {
     }
 
     private void queue(JSONObject action) {
-        if (nextAction == null && worker != null) {
-            nextAction = action;
+        if (worker != null) {
+            boolean sound = "sound".equals(action.optString("op"));
+            if (sound && !pending.isEmpty()) return;   // sounds are optional, commands are not
+            if (pending.size() >= 8) return;
+            pending.add(action);
             refresh();
         }
     }
@@ -105,10 +109,10 @@ public final class TlProActivity extends Activity {
     private void poll() {
         ExecutorService running = worker;
         if (running == null || awaitingReply) return;
-        boolean action = nextAction != null;
-        JSONObject request = panel.request(nextAction);
+        JSONObject queued = pending.poll();
+        boolean action = queued != null;
+        JSONObject request = panel.request(queued);
         int revision = panel.revision();
-        nextAction = null;
         awaitingReply = true;
         running.execute(() -> {
             JSONObject response = exchange(request);
@@ -121,7 +125,7 @@ public final class TlProActivity extends Activity {
                     panel.accept(response, revision, action);
                 }
                 main.removeCallbacks(poll);
-                main.postDelayed(poll, nextAction == null ? panel.pollInterval() : 0);
+                main.postDelayed(poll, pending.isEmpty() ? panel.pollInterval() : 0);
             });
         });
     }

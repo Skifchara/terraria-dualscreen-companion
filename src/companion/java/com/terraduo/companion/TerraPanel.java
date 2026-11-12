@@ -1194,6 +1194,25 @@ final class TerraPanel extends View {
         neededHeight = Math.max(neededHeight, y - top + scrollY);
     }
 
+    /** One line about the last housing check / move-in the game reported. */
+    private String housingText() {
+        JSONObject result = latest == null ? null : latest.optJSONObject("housing");
+        if (result == null) return "";
+        if ("move".equals(result.optString("command"))) {
+            return result.optString("npc") + ": " + Strings.get(result.optBoolean("ok") ? "house_moved" : "house_failed");
+        }
+        if (!result.optBoolean("enclosed")) return Strings.get("house_not_enclosed");
+        JSONArray missing = result.optJSONArray("missing");
+        if (missing != null && missing.length() > 0) {
+            StringBuilder text = new StringBuilder(Strings.get("house_missing"));
+            for (int index = 0; index < missing.length(); index++) {
+                text.append(index == 0 ? " " : ", ").append(Strings.get("house_" + missing.optString(index)));
+            }
+            return text.toString();
+        }
+        return Strings.get(result.optBoolean("needs") ? "house_ok" : "house_unsuitable");
+    }
+
     private static final int[] TEAM_COLORS = {0xff5a6578, 0xffd04848, 0xff3fa653, 0xff4a6ed8, 0xffd8c040, 0xffd868b8};
 
     /** The game's housing / players / team page: team and PvP, town NPCs with their homes, other players. */
@@ -1221,6 +1240,8 @@ final class TerraPanel extends View {
         button(canvas, "pvp", "PvP: " + Strings.get(pvp ? "on" : "off"), 30 * s, y, 260 * s, 62 * s, pvp ? 0xff8a2a2f : 0xff2a3a6a, s);
         y += 82 * s;
         drawText(canvas, Strings.get("npcs_town"), 30 * s, y, 28 * s, GOLD, true);
+        String housing = housingText();
+        if (!housing.isEmpty()) drawText(canvas, housing, 30 * s + measure(Strings.get("npcs_town"), 28 * s) + 24 * s, y + 3 * s, 24 * s, 0xffffe9a8, true);
         y += 42 * s;
         JSONArray npcs = people == null ? null : people.optJSONArray("npcs");
         for (int index = 0; npcs != null && index < npcs.length(); index++) {
@@ -1235,7 +1256,12 @@ final class TerraPanel extends View {
             drawText(canvas, npc.optString(1), 110 * s, y + 14 * s, 30 * s, INK, true);
             boolean homeless = npc.optBoolean(2);
             String status = Strings.get(homeless ? "homeless" : "has_home");
-            drawText(canvas, status, w - 50 * s - measure(status, 26 * s), y + 17 * s, 26 * s, homeless ? 0xffffb06a : 0xff7be07b, true);
+            drawText(canvas, status, w - 430 * s - measure(status, 24 * s), y + 17 * s, 24 * s, homeless ? 0xffffb06a : 0xff7be07b, true);
+            int npcIndex = npc.optInt(8, -1);
+            if (npcIndex >= 0) {
+                button(canvas, "house_check_" + npcIndex, Strings.get("house_check"), w - 410 * s, y + 5 * s, 180 * s, 52 * s, 0xff2a3a6a, s);
+                button(canvas, "house_move_" + npcIndex, Strings.get("house_move"), w - 220 * s, y + 5 * s, 180 * s, 52 * s, 0xff347461, s);
+            }
             y += 70 * s;
         }
         if (npcs == null || npcs.length() == 0) {
@@ -2260,6 +2286,16 @@ final class TerraPanel extends View {
         if (!name.startsWith("sheet_") && !name.startsWith("chest_")) sound("tick");
         if (name.startsWith("sheet_")) {
             sheetAction(name.substring(6));
+            return;
+        }
+        if (name.startsWith("house_")) {
+            // house_check_<npc> / house_move_<npc>: the game's own room check at the player's position
+            String[] parts = name.split("_");
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "housing");
+            TlProPanel.put(command, "command", parts[1]);
+            TlProPanel.put(command, "npc", Integer.parseInt(parts[2]));
+            send.accept(command);
             return;
         }
         if (name.startsWith("loadout_") || name.startsWith("team_") || name.equals("pvp")) {

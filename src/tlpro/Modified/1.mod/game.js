@@ -25,6 +25,13 @@ function playSound(name) {
     } catch (_) { /* sounds are optional */ }
 }
 
+// Result of the last housing check / move-in, shown on the People tab for a short while.
+let lastHousing = null;
+
+function setHousing(result) {
+    lastHousing = Object.assign({ at: Date.now() }, result);
+}
+
 function itemState(item) {
     if (!item || item.type === 0 || item.stack <= 0) {
         return [0, 0, 0, false, ""];
@@ -382,8 +389,8 @@ function readPeople(player) {
         for (let index = 0; index < list.length && npcs.length < 40; index++) {
             const npc = list[index];
             if (npc && npc.active && npc.townNPC) {
-                npcs.push([NPCClass.TypeToDefaultHeadIndex(npc.type), String(safe(() => npc.GivenName, "")),
-                    !!npc.homeless, npc.homeTileX, npc.homeTileY, npc.type, npc.life, npc.lifeMax]);
+                npcs.push([NPCClass.TypeToDefaultHeadIndex(npc.type), String(safe(() => npc.GivenName, "")) || String(safe(() => npc.TypeName, "")),
+                    !!npc.homeless, npc.homeTileX, npc.homeTileY, npc.type, npc.life, npc.lifeMax, index]);
             }
         }
     } catch (_) { /* no npc list */ }
@@ -472,6 +479,7 @@ function snapshot(player, pane, page) {
         buffs: readBuffs(player),
         info: readInfo(player),
         chest: readChest(player),
+        housing: lastHousing && Date.now() - lastHousing.at < 20000 ? lastHousing : null,
         defense: safe(() => player.statDefense, 0),
         loadout: safe(() => player.CurrentLoadoutIndex, 0),
         team: safe(() => player.team, 0),
@@ -534,4 +542,4 @@ function backgrounds() {
     return result;
 }
 
-export { Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

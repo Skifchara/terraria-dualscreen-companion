@@ -7,6 +7,8 @@ const Main = game.Main;
 const ItemSlot = new NativeClass("Terraria.UI", "ItemSlot");
 const ItemSorting = new NativeClass("Terraria.UI", "ItemSorting");
 const ChestUI = new NativeClass("Terraria.UI", "ChestUI");
+const WorldGenClass = new NativeClass("Terraria", "WorldGen");
+const RoomFeedback = new NativeClass("Terraria.DataStructures", "RichRoomCheckFeedback");
 const NativeObject = new NativeClass("System", "Object");
 
 function safe(read, fallback) {
@@ -230,6 +232,38 @@ function trashSwap(player, request) {
     game.refreshRecipes();
 }
 
+// The game's housing query: is the room around the player a valid home, and can this NPC move in. The game itself
+// draws the room check (blocks, markers) on the main screen through its own feedback object.
+function housing(player, request) {
+    const center = player.get_Center();
+    const x = Math.floor(center.X / 16);
+    const y = Math.floor(center.Y / 16);
+    const feedback = RoomFeedback.Instance;
+    const result = { command: String(request.command) };
+    if (request.command === "check") {
+        result.enclosed = !!WorldGenClass.StartRoomCheck(x, y, feedback);
+        result.tiles = safe(() => WorldGenClass.numRoomTiles, 0);
+        result.needs = result.enclosed ? !!safe(() => WorldGenClass.RoomNeeds(), false) : false;
+        result.missing = [];
+        for (const [field, label] of [["roomTorch", "light"], ["roomDoor", "door"], ["roomChair", "chair"], ["roomTable", "table"]]) {
+            if (result.enclosed && safe(() => WorldGenClass[field], true) === false) {
+                result.missing.push(label);
+            }
+        }
+    } else if (request.command === "move") {
+        const npc = Number.isInteger(request.npc) ? Main.npc[request.npc] : null;
+        if (!npc || !npc.active || !npc.townNPC) {
+            throw new Error("Этого жителя больше нет");
+        }
+        result.ok = !!WorldGenClass.MoveTownNPC(x, y, request.npc, feedback);
+        result.npc = String(safe(() => npc.GivenName, "") || safe(() => npc.TypeName, ""));
+    } else {
+        throw new Error("Неизвестная команда жилья");
+    }
+    game.setHousing(result);
+    game.refreshRecipes();
+}
+
 // Buttons of the chest window, each one runs the game's own routine.
 function chestAction(player, request) {
     if (player.chest === -1 || request.container !== player.chest) {
@@ -345,6 +379,9 @@ function actWithoutSound(player, request) {
             break;
         case "trashswap":
             trashSwap(player, request);
+            break;
+        case "housing":
+            housing(player, request);
             break;
         case "team": {
             const value = request.value;

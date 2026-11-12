@@ -48,6 +48,18 @@ final class Strings {
         put("craft", "Craft", "Крафт", "Fabricación", "Wytwarzanie");
         put("map", "Map", "Карта", "Mapa", "Mapa");
         put("people", "People", "Люди", "Gente", "Ludzie");
+        put("house_check", "Check room", "Проверить", "Revisar", "Sprawdź");
+        put("house_move", "Move in", "Заселить", "Mudar", "Wprowadź");
+        put("house_not_enclosed", "Not a closed room here", "Здесь нет замкнутой комнаты", "Aquí no hay habitación cerrada", "Tu nie ma zamkniętego pokoju");
+        put("house_missing", "Room is closed but lacks", "Комната замкнута, но нет", "La habitación está cerrada pero falta", "Pokój jest zamknięty, ale brak");
+        put("house_unsuitable", "Room does not meet the needs", "Комната не подходит", "La habitación no cumple los requisitos", "Pokój nie spełnia wymagań");
+        put("house_ok", "Room is suitable", "Комната подходит", "La habitación es adecuada", "Pokój nadaje się");
+        put("house_light", "a light", "света", "luz", "światła");
+        put("house_door", "a door", "двери", "puerta", "drzwi");
+        put("house_chair", "a chair", "стула", "silla", "krzesła");
+        put("house_table", "a table", "стола", "mesa", "stołu");
+        put("house_moved", "moved in", "заселён", "se mudó", "wprowadzony");
+        put("house_failed", "cannot move in here", "сюда нельзя заселить", "no puede mudarse aquí", "nie może się tu wprowadzić");
         put("team", "Team", "Команда", "Equipo", "Drużyna");
         put("team_0", "None", "Нет", "Ninguno", "Brak");
         put("team_1", "Red", "Красная", "Rojo", "Czerwona");
