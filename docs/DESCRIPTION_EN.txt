@@ -1,4 +1,4 @@
-TERRADUO COMPANION  -  version 1.0.2
+TERRADUO COMPANION  -  version 1.0.3
 Second-screen companion for Terraria on dual-screen Android devices (built and tested on the AYN Thor)
 =====================================================================================================
 
@@ -45,8 +45,8 @@ WHAT YOU NEED
   * A PC with Python 3.10+ and adb, once, to prepare the sprites from your own copy of the game.
 
 WHAT IS IN THIS PACKAGE
-  Terraduo-Companion-1.0.2.apk        the companion app (signed with a development key)
-  Terraduo-Companion-mod-v6.tl      the TL Pro mod pack that exposes the game state
+  Terraduo-Companion-1.0.3.apk        the companion app (signed with a development key)
+  Terraduo-Companion-mod-v7.tl      the TL Pro mod pack that exposes the game state
   icon.png                          the app icon (original artwork)
   tools/                            PC scripts that decode sprites and backgrounds from your game
   screenshots/                      every screen of the app

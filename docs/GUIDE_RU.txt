@@ -11,13 +11,13 @@ TERRADUO COMPANION  -  РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ (по-р�
    * Сделайте резервную копию сохранений (Android/data/com.and.games505.TerrariaPaid/files/).
 
 2. УСТАНОВКА ПРИЛОЖЕНИЯ
-   а) Скопируйте Terraduo-Companion-1.0.2.apk на устройство и установите (разрешите «установку
+   а) Скопируйте Terraduo-Companion-1.0.3.apk на устройство и установите (разрешите «установку
       из неизвестных источников» для файлового менеджера) — или с ПК:
-          adb install -r Terraduo-Companion-1.0.2.apk
+          adb install -r Terraduo-Companion-1.0.3.apk
    б) Приложение называется «Terraduo Companion», иконка — из icon.png.
 
 3. УСТАНОВКА МОДА В TL PRO
-   а) Скопируйте Terraduo-Companion-mod-v6.tl на устройство.
+   а) Скопируйте Terraduo-Companion-mod-v7.tl на устройство.
    б) В TL Pro откройте менеджер пакетов/модов, импортируйте .tl и включите пакет
       «Terraduo Companion» для своего одиночного профиля.
    в) После каждого обновления мода перезапускайте игру через TL Pro: моды загружаются один раз

@@ -76,6 +76,7 @@ public final class TlProActivity extends Activity {
 
     @Override protected void onPause() {
         main.removeCallbacks(poll);
+        if (panel != null) panel.saveState();
         if (worker != null) worker.shutdownNow();
         worker = null;
         awaitingReply = false;

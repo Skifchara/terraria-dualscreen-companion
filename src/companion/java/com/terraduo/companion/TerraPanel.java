@@ -66,6 +66,9 @@ final class TerraPanel extends View {
 
     // map
     private Bitmap mapBitmap;
+    private MapCache mapCache;
+    private int requestCols, requestRows;
+    private long lastCacheTry;
     private int mapLeft, mapTop, mapStep = 2, mapCols, mapRows, playerX, playerY;
     private float viewScale = 3.5f;   // screen pixels per world tile, continuous
     private float targetScale = 3.5f;
@@ -125,6 +128,7 @@ final class TerraPanel extends View {
         this.send = send;
         this.refresh = refresh;
         this.sprites = new SpriteStore(context);
+        this.mapCache = new MapCache(context.getFilesDir());
         sprites.warm("ui:Heart");
         sprites.warm("ui:Mana");
         sprites.warm("ui:InventoryBack");
@@ -271,7 +275,7 @@ final class TerraPanel extends View {
                 if (response.has("lang")) applyLanguage(response.optString("lang"));
                 scene.update(response.optJSONObject("env"), backgrounds);
                 if (!talking()) npcInfo = null;
-                if (pane == 3 && response.has("map")) updateMap(response.optJSONObject("map"), response.optJSONArray("position"));
+                if (pane == 3 && response.has("map")) updateMap(response.optJSONObject("map"), response.optJSONArray("position"), response.optJSONObject("env"));
                 else if (response.has("position")) {
                     JSONArray position = response.optJSONArray("position");
                     playerX = position.optInt(0);
@@ -369,7 +373,16 @@ final class TerraPanel extends View {
 
     private static int typeOf(JSONArray data) { return data == null ? 0 : data.optInt(0); }
 
-    private void updateMap(JSONObject map, JSONArray position) {
+    /** Same world -> same cache folder, so the map survives restarts of the app and the game. */
+    private String worldKey(JSONObject env) {
+        if (env == null) return "";
+        int id = env.optInt("worldId");
+        String name = env.optString("worldName");
+        if (id != 0 || !name.isEmpty()) return "w" + id + "_" + name;
+        return env.optInt("worldW") > 0 ? "x" + env.optInt("worldW") + "_" + env.optInt("worldH") : "";
+    }
+
+    private void updateMap(JSONObject map, JSONArray position, JSONObject env) {
         if (map == null || position == null) return;
         int cols = map.optInt("width");
         int rows = map.optInt("height");
@@ -380,21 +393,76 @@ final class TerraPanel extends View {
             int rgb = data.optInt(index);
             colors[index] = rgb == 0 ? 0 : 0xff000000 | rgb;
         }
-        if (mapBitmap == null || mapBitmap.getWidth() != cols || mapBitmap.getHeight() != rows) {
-            mapBitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
+        int left = map.optInt("left");
+        int top = map.optInt("top");
+        int step = Math.max(1, map.optInt("step", 1));
+        String world = worldKey(env);
+        if (!world.isEmpty()) mapCache.setWorld(world);
+        // merge into the permanent cache and show everything known around here, not only what was just sampled
+        mapCache.put(left, top, step, cols, rows, colors);
+        int eCols = cols * 3;
+        int eRows = rows * 3;
+        int eLeft = left - cols * step;
+        int eTop = top - rows * step;
+        int[] merged = mapCache.hasWorld() ? mapCache.compose(eLeft, eTop, step, eCols, eRows) : null;
+        if (merged == null) {
+            merged = colors;
+            eCols = cols;
+            eRows = rows;
+            eLeft = left;
+            eTop = top;
         }
-        mapBitmap.setPixels(colors, 0, cols, 0, 0, cols, rows);
-        mapLeft = map.optInt("left");
-        mapTop = map.optInt("top");
-        mapStep = Math.max(1, map.optInt("step", 1));
-        mapCols = cols;
-        mapRows = rows;
+        if (mapBitmap == null || mapBitmap.getWidth() != eCols || mapBitmap.getHeight() != eRows) {
+            mapBitmap = Bitmap.createBitmap(eCols, eRows, Bitmap.Config.ARGB_8888);
+        }
+        mapBitmap.setPixels(merged, 0, eCols, 0, 0, eCols, eRows);
+        mapLeft = eLeft;
+        mapTop = eTop;
+        mapStep = step;
+        mapCols = eCols;
+        mapRows = eRows;
+        requestCols = cols;
+        requestRows = rows;
         playerX = position.optInt(0);
         playerY = position.optInt(1);
         if (follow) {
             viewCx = playerX;
             viewCy = playerY;
         }
+    }
+
+    /** Before the first answer of the game: show what the permanent cache already knows around the player. */
+    private void showCachedMap() {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastCacheTry < 700 || !mapCache.hasWorld() || mapCache.count() == 0 || (playerX == 0 && playerY == 0)) return;
+        lastCacheTry = now;
+        int step = desiredStep();
+        int cols = 192;
+        int rows = 144;
+        int left = playerX - cols * step / 2;
+        int top = playerY - rows * step / 2;
+        int[] merged = mapCache.compose(left, top, step, cols, rows);
+        boolean any = false;
+        for (int value : merged) if (value != 0) { any = true; break; }
+        if (!any) return;
+        mapBitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
+        mapBitmap.setPixels(merged, 0, cols, 0, 0, cols, rows);
+        mapLeft = left;
+        mapTop = top;
+        mapStep = step;
+        mapCols = cols;
+        mapRows = rows;
+        requestCols = cols;
+        requestRows = rows;
+        if (follow) {
+            viewCx = playerX;
+            viewCy = playerY;
+        }
+    }
+
+    /** Called when the app leaves the screen: write the map cache. */
+    void saveState() {
+        mapCache.flush();
     }
 
     private void changeZoom(int offset) {
@@ -1030,6 +1098,7 @@ final class TerraPanel extends View {
         panel(canvas, mapPort.left - 6 * s, mapPort.top - 6 * s, mapPort.right + 6 * s, mapPort.bottom + 6 * s, 0xff3a2a14, 0xffd8a84a, s);
         fill.setColor(0xff070d18);
         canvas.drawRect(mapPort, fill);
+        if (mapBitmap == null) showCachedMap();
         if (mapBitmap == null) {
             drawCentered(canvas, Strings.get("map_loading"), w / 2f, (top + bottom) / 2, 34 * s, MUTED);
         } else {
@@ -1114,7 +1183,7 @@ final class TerraPanel extends View {
             message = (data == null ? "" : data.optString(4)) + "  ·  " + Strings.get("pick_target");
         } else {
             JSONArray inventory = latest.optJSONArray("inventory");
-            int selected = latest.optInt("hotbar", latest.optInt("selected", 0));
+            int selected = latest.optBoolean("override") ? latest.optInt("hotbar", 0) : latest.optInt("selected", latest.optInt("hotbar", 0));
             JSONArray data = inventory == null ? null : inventory.optJSONArray(selected);
             String name = data == null || typeOf(data) == 0 ? "" : data.optString(4);
             message = name + (pane <= 1 ? (name.isEmpty() ? "" : "  ·  ") + Strings.get("hint_drag") : "");
@@ -1133,8 +1202,13 @@ final class TerraPanel extends View {
         float x0 = (w - total) / 2;
         float y = h - 162 * s;
         panel(canvas, x0 - 14 * s, y - 14 * s, x0 + total + 14 * s, y + size + 14 * s, 0xaa101a38, 0xff5a6ea8, s);
-        int selected = latest == null ? -1 : latest.optInt("hotbar", latest.optInt("selected", -1));
-        int overrideSlot = latest == null ? -1 : latest.optInt("selected", -1);
+        // The frame follows the item actually in the hand. While the game holds a temporary override (auto-swap of a
+        // tool, a potion...) the stable hotbar slot is kept and the override slot only pulses.
+        boolean overridden = latest != null && latest.optBoolean("override");
+        int stable = latest == null ? -1 : latest.optInt("hotbar", latest.optInt("selected", -1));
+        int inHand = latest == null ? -1 : latest.optInt("selected", stable);
+        int selected = overridden ? stable : inHand;
+        int overrideSlot = overridden ? inHand : -1;
         float targetX = selected < 0 ? -1 : x0 + selected * (size + 6 * s);
         if (highlightX < 0 || targetX < 0) highlightX = targetX;
         else highlightX += (targetX - highlightX) * 0.35f;
@@ -1752,8 +1826,8 @@ final class TerraPanel extends View {
         if (mapBitmap == null) return;
         float centerX = mapLeft + mapCols * mapStep / 2f;
         float centerY = mapTop + mapRows * mapStep / 2f;
-        float limitX = mapCols * mapStep * 0.18f;
-        float limitY = mapRows * mapStep * 0.18f;
+        float limitX = Math.max(1, requestCols) * mapStep * 0.18f;
+        float limitY = Math.max(1, requestRows) * mapStep * 0.18f;
         if (force || Math.abs(viewCx - centerX) > limitX || Math.abs(viewCy - centerY) > limitY) {
             revision++;
             refresh.run();

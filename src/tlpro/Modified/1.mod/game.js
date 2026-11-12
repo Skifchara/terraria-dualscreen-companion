@@ -258,6 +258,7 @@ function environment(player) {
     }
     return { day: !!Main.dayTime, rain: !!Main.raining, blood: !!Main.bloodMoon, eclipse: !!Main.eclipse, zones,
         time: safe(() => Number(Main.time), 0), lightning: safe(() => Number(Main.lightning), 0),
+        worldId: safe(() => Main.worldID, 0), worldName: String(safe(() => Main.worldName, "")),
         worldW: safe(() => Main.maxTilesX, 0), worldH: safe(() => Main.maxTilesY, 0),
         surface: safe(() => Main.worldSurface, 0), rock: safe(() => Main.rockLayer, 0),
         rainPower: safe(() => Number(Main.maxRaining), 0), moon: safe(() => Main.moonPhase, 0),

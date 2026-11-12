@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 (unreleased build)
+
+- The explored map is kept for good: samples are merged into per-world chunks on disk, so the map is no longer rebuilt from
+  scratch when you pan, zoom or restart the app or the game.
+- Hotbar frame follows the item in hand again (it only keeps the stable slot while the game holds a temporary override).
+
 ## 1.0.2
 
 - Larger item icons: slots up to 100 px with 6 px gaps, sprites fill more of each slot.
