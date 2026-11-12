@@ -11,9 +11,9 @@ TERRADUO COMPANION  -  РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ (по-р�
    * Сделайте резервную копию сохранений (Android/data/com.and.games505.TerrariaPaid/files/).
 
 2. УСТАНОВКА ПРИЛОЖЕНИЯ
-   а) Скопируйте Terraduo-Companion-1.0.1.apk на устройство и установите (разрешите «установку
+   а) Скопируйте Terraduo-Companion-1.0.2.apk на устройство и установите (разрешите «установку
       из неизвестных источников» для файлового менеджера) — или с ПК:
-          adb install -r Terraduo-Companion-1.0.1.apk
+          adb install -r Terraduo-Companion-1.0.2.apk
    б) Приложение называется «Terraduo Companion», иконка — из icon.png.
 
 3. УСТАНОВКА МОДА В TL PRO

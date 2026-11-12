@@ -11,8 +11,8 @@ TERRADUO COMPANION  -  USER GUIDE (English)
    * Back up your saves first (Android/data/com.and.games505.TerrariaPaid/files/).
 
 2. INSTALL THE APP
-   a) Copy Terraduo-Companion-1.0.1.apk to the device and install it (allow "install unknown apps"
-      for your file manager) - or from the PC:   adb install -r Terraduo-Companion-1.0.1.apk
+   a) Copy Terraduo-Companion-1.0.2.apk to the device and install it (allow "install unknown apps"
+      for your file manager) - or from the PC:   adb install -r Terraduo-Companion-1.0.2.apk
    b) The app is called "Terraduo Companion" and has the icon from icon.png.
 
 3. INSTALL THE MOD IN TL PRO

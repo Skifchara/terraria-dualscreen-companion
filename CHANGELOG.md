@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Larger item icons: slots up to 100 px with 6 px gaps, sprites fill more of each slot.
+- Compact top bar (about 40 px less height) and slimmer tabs; more room for the item grid, map and craft list.
+- Refreshed screenshots.
+
 ## 1.0.1
 
 - Fixed: with the HUD hidden, the controller's Y button no longer opens the game's own inventory; it cycles the companion's
