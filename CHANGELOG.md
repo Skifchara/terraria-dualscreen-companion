@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.5
 
 - New People tab: team (colour) and PvP toggle, town NPCs with a housed / homeless status, other players.
 - Housing: each town NPC has "Check room" (the game's own room check at your position, drawn on the main screen, with the
