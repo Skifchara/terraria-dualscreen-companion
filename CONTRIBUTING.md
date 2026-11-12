@@ -46,7 +46,7 @@ Mod code lives in `src/tlpro/Modified/1.mod/*.js`. It runs inside TL Pro's runti
 Useful tools: `tools/tl_client.py` (talk to the mod over `adb forward tcp:38656 tcp:38656`),
 `tools/extract_assets.py` and `tools/extract_backgrounds.py` (prepare sprites from your own game).
 
-Check before you open a PR:
+Check before you open a PR (a ready-made GitHub Actions workflow is in `docs/ci.yml.example` — copy it to `.github/workflows/ci.yml` when Actions are available):
 
 ```
 for f in src/tlpro/Modified/1.mod/*.js; do node --input-type=module --check < "$f"; done
