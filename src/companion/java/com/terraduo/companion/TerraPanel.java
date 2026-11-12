@@ -446,7 +446,7 @@ final class TerraPanel extends View {
 
         drawTopBar(canvas, w, s);
         drawTabs(canvas, w, s);
-        float contentTop = 238 * s;
+        float contentTop = 164 * s;
         float contentBottom = h - 290 * s;
         viewHeight = contentBottom - contentTop;
         neededHeight = 0;
@@ -656,7 +656,7 @@ final class TerraPanel extends View {
     }
 
     private void drawTopBar(Canvas canvas, int w, float s) {
-        panel(canvas, 12 * s, 8 * s, w - 12 * s, 130 * s, 0xbb101a38, 0xff5a6ea8, s);
+        panel(canvas, 12 * s, 6 * s, w - 12 * s, 86 * s, 0xbb101a38, 0xff5a6ea8, s);
         JSONArray hp = latest == null ? null : latest.optJSONArray("hp");
         JSONArray mana = latest == null ? null : latest.optJSONArray("mana");
         long nowMs = SystemClock.uptimeMillis();
@@ -665,41 +665,41 @@ final class TerraPanel extends View {
         boolean showHearts = flipping && phase < 0.5f ? !heartsMode : heartsMode;
         float flipScale = flipping ? Math.max(0.04f, (float) Math.abs(Math.cos(Math.PI * phase))) : 1f;
         canvas.save();
-        canvas.scale(1f, flipScale, 250 * s, 40 * s);
+        canvas.scale(1f, flipScale, 250 * s, 28 * s);
         if (showHearts) {
-            drawIcons(canvas, 30 * s, 47 * s, 480 * s, shownHp, hp == null ? 1 : hp.optInt(1), 20, "ui:Heart", "ui:Heart2", s, 2, 40 * s);
+            drawIcons(canvas, 30 * s, 30 * s, 460 * s, shownHp, hp == null ? 1 : hp.optInt(1), 20, "ui:Heart", "ui:Heart2", s, 2, 25 * s);
         } else {
-            gameBar(canvas, 30 * s, 40 * s, 470 * s, 1.25f * s, shownHp, hp == null ? 1 : hp.optInt(1), "BarHeart", "ui:Heart",
+            gameBar(canvas, 30 * s, 26 * s, 450 * s, 0.95f * s, shownHp, hp == null ? 1 : hp.optInt(1), "BarHeart", "ui:Heart",
                 0xffe0414a, 0xff5a1018, Strings.get("hp") + " " + (int) shownHp + " / " + (hp == null ? 0 : hp.optInt(1)), s);
         }
         canvas.restore();
         canvas.save();
-        canvas.scale(1f, flipScale, 250 * s, 96 * s);
+        canvas.scale(1f, flipScale, 250 * s, 64 * s);
         if (showHearts) {
-            drawIcons(canvas, 30 * s, 104 * s, 480 * s, shownMana, mana == null ? 1 : mana.optInt(1), 20, "ui:Mana", null, s, 1, 46 * s);
+            drawIcons(canvas, 30 * s, 66 * s, 460 * s, shownMana, mana == null ? 1 : mana.optInt(1), 20, "ui:Mana", null, s, 1, 27 * s);
         } else {
-            gameBar(canvas, 30 * s, 96 * s, 470 * s, 1.25f * s, shownMana, mana == null ? 1 : mana.optInt(1), "BarMana", "ui:Mana",
+            gameBar(canvas, 30 * s, 62 * s, 450 * s, 0.95f * s, shownMana, mana == null ? 1 : mana.optInt(1), "BarMana", "ui:Mana",
                 0xff5a8cff, 0xff142a66, Strings.get("mana") + " " + (int) shownMana + " / " + (mana == null ? 0 : mana.optInt(1)), s);
         }
         canvas.restore();
         Hit flip = new Hit();
         flip.type = 2;
         flip.name = "barflip";
-        flip.rect.set(24 * s, 10 * s, 520 * s, 126 * s);
+        flip.rect.set(24 * s, 8 * s, 500 * s, 84 * s);
         hits.add(flip);
         JSONObject env = latest == null ? null : latest.optJSONObject("env");
         if (env != null) {
             String line = Strings.get(env.optBoolean("day", true) ? "day" : "night");
             JSONArray zones = env.optJSONArray("zones");
             if (zones != null && zones.length() > 0) line += "  ·  " + zones.optString(0);
-            drawText(canvas, line, 540 * s, 24 * s, 25 * s, MUTED, true);
+            drawText(canvas, line, 510 * s, 12 * s, 22 * s, MUTED, true);
         }
         String info = infoLine();
-        if (!info.isEmpty()) drawText(canvas, info, 540 * s, 76 * s, 24 * s, 0xffffe9a8, true);
+        if (!info.isEmpty()) drawText(canvas, info, 510 * s, 46 * s, 21 * s, 0xffffe9a8, true);
         float bx = w - 30 * s;
-        bx = button(canvas, "lang", Strings.get("lang_button"), bx - 90 * s, 28 * s, 90 * s, 66 * s, 0xff2a3a6a, s);
+        bx = button(canvas, "lang", Strings.get("lang_button"), bx - 74 * s, 20 * s, 74 * s, 52 * s, 0xff2a3a6a, s);
         boolean can = latest != null && latest.optBoolean("hudAvailable");
-        button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 230 * s, 28 * s, 230 * s, 66 * s,
+        button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 200 * s, 20 * s, 200 * s, 52 * s,
             can ? (hideRequested ? 0xff347461 : 0xff2a3a6a) : 0xff1a2238, s);
     }
 
@@ -762,14 +762,14 @@ final class TerraPanel extends View {
 
     private void drawTabs(Canvas canvas, int w, float s) {
         float tabWidth = (w - 36 * s) / PANES.length;
-        float y = 136 * s;
-        float height = 88 * s;
+        float y = 92 * s;
+        float height = 62 * s;
         for (int index = 0; index < PANES.length; index++) {
             float x = 18 * s + index * tabWidth;
             boolean active = index == pane;
             panel(canvas, x + 4 * s, y, x + tabWidth - 4 * s, y + height, active ? 0xdd23457a : 0x99101a38,
                 active ? GOLD : 0xff5a6ea8, s);
-            drawCentered(canvas, Strings.get(PANES[index]), x + tabWidth / 2, y + height / 2, 32 * s, INK);
+            drawCentered(canvas, Strings.get(PANES[index]), x + tabWidth / 2, y + height / 2, 30 * s, INK);
             Hit hit = new Hit();
             hit.type = 1;
             hit.index = index;
@@ -787,15 +787,15 @@ final class TerraPanel extends View {
     }
 
     private float slotSize(int w, float s, int columns) {
-        return Math.min(86 * s, (w - 60 * s) / columns - 8 * s);
+        return Math.min(100 * s, (w - 40 * s) / columns - 6 * s);
     }
 
     private void slotRow(Canvas canvas, int w, float s, float y, int group, int start, int count, String[] labels, int columns) {
         float size = slotSize(w, s, columns);
-        float total = columns * (size + 8 * s) - 8 * s;
+        float total = columns * (size + 6 * s) - 6 * s;
         float x0 = (w - total) / 2;
         for (int offset = 0; offset < count; offset++) {
-            drawSlotAt(canvas, x0 + offset * (size + 8 * s), y, size, group, start + offset, labels == null ? null : labels[offset]);
+            drawSlotAt(canvas, x0 + offset * (size + 6 * s), y, size, group, start + offset, labels == null ? null : labels[offset]);
         }
     }
 
@@ -806,14 +806,14 @@ final class TerraPanel extends View {
         if (chest != null) y = drawChest(canvas, w, s, y, chest);
         for (int row = 1; row < 5; row++) {
             slotRow(canvas, w, s, y, 0, row * 10, 10, null, 10);
-            y += size + 8 * s;
+            y += size + 6 * s;
         }
         drawText(canvas, Strings.get("coins_ammo"), 30 * s, y + 4 * s, 28 * s, MUTED, true);
         float bx = w - 30 * s;
         button(canvas, "sort", Strings.get("sort"), bx - 170 * s, y - 2 * s, 170 * s, 40 * s, 0xff2a3a6a, s);
         y += 44 * s;
         slotRow(canvas, w, s, y, 0, 50, 8, null, 10);
-        float trashX = (w - (10 * (size + 8 * s) - 8 * s)) / 2 + 9 * (size + 8 * s);
+        float trashX = (w - (10 * (size + 6 * s) - 6 * s)) / 2 + 9 * (size + 6 * s);
         JSONArray trash = slotData(6, 0);
         if (trash != null) drawSlotAt(canvas, trashX, y, size, 6, 0, null);
         if (trash != null && typeOf(trash) == 0) {
@@ -861,7 +861,7 @@ final class TerraPanel extends View {
         float size = slotSize(w, s, 10);
         for (int start = 0; start < count; start += 10) {
             slotRow(canvas, w, s, y, 5, start, Math.min(10, count - start), null, 10);
-            y += size + 8 * s;
+            y += size + 6 * s;
         }
         y += 6 * s;
         fill.setColor(0x55b5c5d4);
@@ -1129,17 +1129,17 @@ final class TerraPanel extends View {
 
     private void drawHotbar(Canvas canvas, int w, int h, float s, long now) {
         float size = Math.min(112 * s, (w - 36 * s) / 10 - 8 * s);
-        float total = 10 * (size + 8 * s) - 8 * s;
+        float total = 10 * (size + 6 * s) - 6 * s;
         float x0 = (w - total) / 2;
         float y = h - 162 * s;
         panel(canvas, x0 - 14 * s, y - 14 * s, x0 + total + 14 * s, y + size + 14 * s, 0xaa101a38, 0xff5a6ea8, s);
         int selected = latest == null ? -1 : latest.optInt("hotbar", latest.optInt("selected", -1));
         int overrideSlot = latest == null ? -1 : latest.optInt("selected", -1);
-        float targetX = selected < 0 ? -1 : x0 + selected * (size + 8 * s);
+        float targetX = selected < 0 ? -1 : x0 + selected * (size + 6 * s);
         if (highlightX < 0 || targetX < 0) highlightX = targetX;
         else highlightX += (targetX - highlightX) * 0.35f;
         for (int index = 0; index < 10; index++) {
-            drawSlotAt(canvas, x0 + index * (size + 8 * s), y, size, 0, index, Integer.toString(index == 9 ? 0 : index + 1));
+            drawSlotAt(canvas, x0 + index * (size + 6 * s), y, size, 0, index, Integer.toString(index == 9 ? 0 : index + 1));
         }
         if (highlightX >= 0) {
             float pulse = 0.5f + 0.5f * (float) Math.sin(now / 260.0);
@@ -1149,7 +1149,7 @@ final class TerraPanel extends View {
             if (overrideSlot >= 0 && overrideSlot != selected && overrideSlot < 10) {
                 stroke.setColor(((int) (120 + 120 * pulse) << 24) | 0xffffff);
                 stroke.setStrokeWidth(3 * s);
-                float ox = x0 + overrideSlot * (size + 8 * s);
+                float ox = x0 + overrideSlot * (size + 6 * s);
                 canvas.drawRect(ox - 2 * s, y - 2 * s, ox + size + 2 * s, y + size + 2 * s, stroke);
             }
         }
@@ -1217,8 +1217,8 @@ final class TerraPanel extends View {
         float s = size / 90f;
         if (icon != null) {
             // like the game: one UI unit per sprite pixel, big sprites shrunk to fit a 32-pixel box
-            float unit = size / 41.6f;
-            float fit = Math.min(1f, 32f / Math.max(icon.getWidth(), icon.getHeight()));
+            float unit = size / 36f;
+            float fit = Math.min(1f, 36f / Math.max(icon.getWidth(), icon.getHeight()));
             float width = icon.getWidth() * fit * unit;
             float height = icon.getHeight() * fit * unit;
             drawSprite(canvas, icon, x + (size - width) / 2, y + (size - height) / 2, width, height);
