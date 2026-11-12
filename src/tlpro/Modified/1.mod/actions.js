@@ -255,8 +255,14 @@ function housing(player, request) {
         if (!npc || !npc.active || !npc.townNPC) {
             throw new Error("Этого жителя больше нет");
         }
-        result.ok = !!WorldGenClass.MoveTownNPC(x, y, request.npc, feedback);
         result.npc = String(safe(() => npc.GivenName, "") || safe(() => npc.TypeName, ""));
+        // the game's return value only says the query was handled, so judge by what happened to the NPC's home
+        result.enclosed = !!WorldGenClass.StartRoomCheck(x, y, feedback);
+        result.ok = false;
+        if (result.enclosed) {
+            WorldGenClass.MoveTownNPC(x, y, request.npc, feedback);
+            result.ok = !npc.homeless && Math.abs(npc.homeTileX - x) <= 12 && Math.abs(npc.homeTileY - y) <= 12;
+        }
     } else {
         throw new Error("Неизвестная команда жилья");
     }

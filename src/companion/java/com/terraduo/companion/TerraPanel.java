@@ -1199,7 +1199,8 @@ final class TerraPanel extends View {
         JSONObject result = latest == null ? null : latest.optJSONObject("housing");
         if (result == null) return "";
         if ("move".equals(result.optString("command"))) {
-            return result.optString("npc") + ": " + Strings.get(result.optBoolean("ok") ? "house_moved" : "house_failed");
+            return result.optString("npc") + ": " + Strings.get(result.optBoolean("ok") ? "house_moved"
+                : result.optBoolean("enclosed", true) ? "house_failed" : "house_not_enclosed");
         }
         if (!result.optBoolean("enclosed")) return Strings.get("house_not_enclosed");
         JSONArray missing = result.optJSONArray("missing");
