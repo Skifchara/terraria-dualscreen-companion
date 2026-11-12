@@ -54,7 +54,15 @@ function find(request) {
         if (!Number.isInteger(request.id) || !Number.isInteger(request.part) || request.id < 0 || request.part < 0) {
             throw new Error("Неверный спрайт");
         }
-        return TextureAssets.Players.GetValue(request.id, request.part);
+        try {
+            Main.instance.LoadPlayer(request.id);
+        } catch (_) { /* loaded already */ }
+        return TextureAssets.Players["object GetValue(int index1, int index2)"](request.id, request.part);
+    }
+    if (kind === "playerhair") {
+        try {
+            Main.instance.LoadHair(request.id);
+        } catch (_) { /* loaded already */ }
     }
     const field = arrays[kind];
     if (!field || !Number.isInteger(request.id) || request.id < 0) {
