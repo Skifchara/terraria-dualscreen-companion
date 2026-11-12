@@ -32,7 +32,7 @@ function hideWhileConnected(className, method, shouldHide) {
         new NativeClass("", className)[method].hook((original, self) => {
             guardInventory();
             if (Date.now() >= hideUntil || Main.gameMenu || Main.netMode !== 0 ||
-                Main.get_playerInventory() || !shouldHide()) {
+                (Main.get_playerInventory() && !yWindow()) || !shouldHide()) {
                 original(self);
             }
         });
@@ -352,6 +352,9 @@ function noteY() {
         return;
     }
     const y = unityKey(keyY);
+    if (y && yBefore) {
+        lastYAt = Date.now();
+    }
     if (y && !yBefore) {
         lastYAt = Date.now();
         try {
@@ -367,13 +370,36 @@ function noteY() {
 // frame from the update hook and from each hidden HUD part, so it also catches a toggle that happens while drawing.
 let inventoryAtY = false;
 
+let GUIInstanceClass;
+try {
+    GUIInstanceClass = new NativeClass("", "GUIInstance");
+} catch (_) { /* no page UI */ }
+
+// True while a Y press that the companion owns is in progress (held, or released less than 0.9 s ago).
+function yWindow() {
+    return Date.now() < hideUntil && !inventoryAtY && Date.now() - lastYAt < 900;
+}
+
 function guardInventory() {
-    if (Date.now() >= hideUntil || Date.now() - lastYAt > 900 || inventoryAtY) {
+    if (!yWindow()) {
         return;
     }
     try {
         if (Main.get_playerInventory()) {
-            Main.set_playerInventory(false);
+            // close it the way the game's own UI does: the page UI owns the open state and re-opens the inventory
+            // every frame if only the flag is cleared
+            try {
+                GUIInstanceClass.Active.GUIPageIcons["void Close(bool hideChat)"](true);
+            } catch (_) {
+                try {
+                    Main.get_LocalPlayer().ToggleInv();
+                } catch (__) {
+                    Main.set_playerInventory(false);
+                }
+            }
+            if (Main.get_playerInventory()) {
+                Main.set_playerInventory(false);
+            }
             pad.blocked = (pad.blocked || 0) + 1;
         }
     } catch (_) { /* not in a world */ }

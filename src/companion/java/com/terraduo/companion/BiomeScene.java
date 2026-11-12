@@ -136,7 +136,14 @@ final class BiomeScene {
             else if (z.contains("Snow")) cave = rock ? 167 : 32;
             else if (z.contains("Jungle")) cave = rock ? 149 : 147;
             else if (z.contains("Desert") || z.contains("UndergroundDesert")) cave = rock ? 190 : 189;
-            else cave = rock ? 80 : 86;
+            else {
+                // plain dirt / stone caves: the game's style number picks the pair (brown dirt, grey stone).
+                // style 4 was read from a running game (it loaded 71 and 72); the others are the neighbouring pairs.
+                int style = env.optInt("under", 4);
+                int[][] pairs = {{67, 69}, {74, 76}, {78, 80}, {81, 82}, {71, 72}, {84, 86}};
+                int[] pair = pairs[Math.max(0, Math.min(pairs.length - 1, style))];
+                cave = rock ? pair[1] : pair[0];
+            }
             layerIds = new int[]{cave};
         }
         if (surface && backgrounds != null) {
