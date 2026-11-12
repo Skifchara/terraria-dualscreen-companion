@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- New People tab: team (colour) and PvP toggle, town NPCs with a housed / homeless status, other players.
+- Equipment tab shows your total defense and the three armour sets (equipment loadouts) with one-tap switching.
+
 ## 1.0.4
 
 - The player marker on the map now follows the player continuously: cheap state requests move it between the (slower) map

@@ -346,6 +346,26 @@ function actWithoutSound(player, request) {
         case "trashswap":
             trashSwap(player, request);
             break;
+        case "team": {
+            const value = request.value;
+            if (!Number.isInteger(value) || value < 0 || value > 5) {
+                throw new Error("Неизвестная команда");
+            }
+            player.team = value;
+            break;
+        }
+        case "pvp":
+            player.hostile = !player.hostile;
+            break;
+        case "loadout": {
+            const index = request.value;
+            if (!Number.isInteger(index) || index < 0 || index > 2) {
+                throw new Error("Неизвестный набор");
+            }
+            player.TrySwitchingLoadout(index);
+            game.refreshRecipes();
+            break;
+        }
         case "take": {
             const ref = checkedSlot(player, request);
             if (request.from[0] !== 5) {

@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  */
 final class TerraPanel extends View {
     private static final int[] STEPS = {1, 2, 4, 8, 16};
-    private static final String[] PANES = {"inventory", "equipment", "craft", "map"};
+    private static final String[] PANES = {"inventory", "equipment", "craft", "map", "people"};
     private static final int INTERACTION = PANES.length;
     private static final float TEXT_BOOST = 1.45f;
     private static final int GOLD = 0xffffd866;
@@ -970,6 +970,7 @@ final class TerraPanel extends View {
             case "equipment": return "item:89";
             case "craft": return "item:36";
             case "map": case "center": return "item:393";
+            case "people": return "npchead:1";
             case "shop": case "shop_open": case "shop_buy": case "sheet_sell": return "item:72";
             case "hud": return "ui:Heart";
             case "lang": return "item:149";
@@ -1010,7 +1011,8 @@ final class TerraPanel extends View {
         if (which == 0 || which == INTERACTION) drawInventory(canvas, w, s, top, which == INTERACTION);
         else if (which == 1) drawEquipment(canvas, w, s, top);
         else if (which == 2) drawCraft(canvas, w, s, top, bottom);
-        else drawMap(canvas, w, s, top, bottom);
+        else if (which == 3) drawMap(canvas, w, s, top, bottom);
+        else drawPeople(canvas, w, s, top);
     }
 
     private float slotSize(int w, float s, int columns) {
@@ -1161,6 +1163,24 @@ final class TerraPanel extends View {
     private void drawEquipment(Canvas canvas, int w, float s, float top) {
         float size = slotSize(w, s, 10) * 0.86f;
         float y = top + 4 * s - scrollY;
+        // header: how much armour you wear, and the three armour sets (equipment loadouts) of the game
+        {
+            int defense = latest == null ? 0 : latest.optInt("defense");
+            int loadout = latest == null ? 0 : latest.optInt("loadout");
+            Bitmap shield = sprites.get("item:938");
+            float bh = 52 * s;
+            fill.setColor(0x66101a38);
+            canvas.drawRect(20 * s, y, w - 20 * s, y + bh, fill);
+            if (shield != null) drawSprite(canvas, shield, 30 * s, y + 4 * s, 44 * s, 44 * s);
+            drawText(canvas, Strings.get("armor_total") + ": " + defense, 84 * s, y + 8 * s, 32 * s, GOLD, true);
+            drawText(canvas, Strings.get("loadout"), w * 0.5f - 90 * s, y + 12 * s, 24 * s, MUTED, true);
+            for (int set = 0; set < 3; set++) {
+                float bx = w - 20 * s - (3 - set) * 76 * s;
+                button(canvas, "loadout_" + set, Integer.toString(set + 1), bx, y + 2 * s, 68 * s, bh - 4 * s,
+                    set == loadout ? 0xff347461 : 0xff2a3a6a, s);
+            }
+            y += bh + 8 * s;
+        }
         String[] labels = gearLabels();
         String[] utility = {Strings.get("pet"), Strings.get("light"), Strings.get("minecart"), Strings.get("mount"), Strings.get("hook")};
         String[] titles = {"armor", "vanity", "dyes", "pets", "pet_dyes"};
@@ -1172,6 +1192,76 @@ final class TerraPanel extends View {
             y += size + 12 * s;
         }
         neededHeight = Math.max(neededHeight, y - top + scrollY);
+    }
+
+    private static final int[] TEAM_COLORS = {0xff5a6578, 0xffd04848, 0xff3fa653, 0xff4a6ed8, 0xffd8c040, 0xffd868b8};
+
+    /** The game's housing / players / team page: team and PvP, town NPCs with their homes, other players. */
+    private void drawPeople(Canvas canvas, int w, float s, float top) {
+        JSONObject people = latest == null ? null : latest.optJSONObject("people");
+        float y = top + 8 * s - scrollY;
+        int team = latest == null ? 0 : latest.optInt("team");
+        boolean pvp = latest != null && latest.optBoolean("pvp");
+        drawText(canvas, Strings.get("team"), 30 * s, y, 28 * s, GOLD, true);
+        y += 40 * s;
+        float gap = 8 * s;
+        float bw = (w - 60 * s - 5 * gap) / 6;
+        for (int index = 0; index < 6; index++) {
+            float bx = 30 * s + index * (bw + gap);
+            panel(canvas, bx, y, bx + bw, y + 62 * s, TEAM_COLORS[index], index == team ? GOLD : 0xff5a6ea8, s);
+            String label = Strings.get("team_" + index);
+            drawCentered(canvas, label, bx + bw / 2, y + 31 * s, fitText(label, 24 * s, bw - 10 * s), INK);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "team_" + index;
+            hit.rect.set(bx, y, bx + bw, y + 62 * s);
+            hits.add(hit);
+        }
+        y += 74 * s;
+        button(canvas, "pvp", "PvP: " + Strings.get(pvp ? "on" : "off"), 30 * s, y, 260 * s, 62 * s, pvp ? 0xff8a2a2f : 0xff2a3a6a, s);
+        y += 82 * s;
+        drawText(canvas, Strings.get("npcs_town"), 30 * s, y, 28 * s, GOLD, true);
+        y += 42 * s;
+        JSONArray npcs = people == null ? null : people.optJSONArray("npcs");
+        for (int index = 0; npcs != null && index < npcs.length(); index++) {
+            JSONArray npc = npcs.optJSONArray(index);
+            if (npc == null) continue;
+            panel(canvas, 30 * s, y, w - 30 * s, y + 62 * s, 0x99101a38, 0xff5a6ea8, s);
+            Bitmap head = npc.optInt(0) >= 0 ? sprites.get("npchead:" + npc.optInt(0)) : null;
+            if (head != null) {
+                float fit = Math.min(48 * s / head.getWidth(), 48 * s / head.getHeight());
+                drawSprite(canvas, head, 44 * s, y + 31 * s - head.getHeight() * fit / 2, head.getWidth() * fit, head.getHeight() * fit);
+            }
+            drawText(canvas, npc.optString(1), 110 * s, y + 14 * s, 30 * s, INK, true);
+            boolean homeless = npc.optBoolean(2);
+            String status = Strings.get(homeless ? "homeless" : "has_home");
+            drawText(canvas, status, w - 50 * s - measure(status, 26 * s), y + 17 * s, 26 * s, homeless ? 0xffffb06a : 0xff7be07b, true);
+            y += 70 * s;
+        }
+        if (npcs == null || npcs.length() == 0) {
+            drawText(canvas, "-", 40 * s, y, 28 * s, MUTED, true);
+            y += 44 * s;
+        }
+        y += 14 * s;
+        drawText(canvas, Strings.get("players_list"), 30 * s, y, 28 * s, GOLD, true);
+        y += 42 * s;
+        JSONArray others = people == null ? null : people.optJSONArray("players");
+        for (int index = 0; others != null && index < others.length(); index++) {
+            JSONArray other = others.optJSONArray(index);
+            if (other == null) continue;
+            panel(canvas, 30 * s, y, w - 30 * s, y + 62 * s, 0x99101a38, 0xff5a6ea8, s);
+            fill.setColor(TEAM_COLORS[Math.max(0, Math.min(5, other.optInt(1)))]);
+            canvas.drawCircle(58 * s, y + 31 * s, 14 * s, fill);
+            drawText(canvas, other.optString(0), 90 * s, y + 14 * s, 30 * s, INK, true);
+            String tail = (other.optBoolean(2) ? "PvP  " : "") + other.optInt(3) + " / " + other.optInt(4);
+            drawText(canvas, tail, w - 50 * s - measure(tail, 26 * s), y + 17 * s, 26 * s, MUTED, true);
+            y += 70 * s;
+        }
+        if (others == null || others.length() == 0) {
+            drawText(canvas, Strings.get("no_players"), 40 * s, y, 28 * s, MUTED, true);
+            y += 44 * s;
+        }
+        neededHeight = Math.max(neededHeight, y - top + scrollY + 20 * s);
     }
 
     // ---- crafting, laid out like the game: list of craftable results on the left, details on the right
@@ -2170,6 +2260,13 @@ final class TerraPanel extends View {
         if (!name.startsWith("sheet_") && !name.startsWith("chest_")) sound("tick");
         if (name.startsWith("sheet_")) {
             sheetAction(name.substring(6));
+            return;
+        }
+        if (name.startsWith("loadout_") || name.startsWith("team_") || name.equals("pvp")) {
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
+            if (!name.equals("pvp")) TlProPanel.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+            send.accept(command);
             return;
         }
         if (name.startsWith("buff_")) {

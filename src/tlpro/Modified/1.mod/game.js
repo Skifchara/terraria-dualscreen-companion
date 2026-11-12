@@ -373,6 +373,32 @@ function readInfo(player) {
     return info;
 }
 
+// The page the game calls housing / players / team: town NPCs with their homes, other players, PvP and team.
+function readPeople(player) {
+    const npcs = [];
+    const players = [];
+    try {
+        const list = Main.npc;
+        for (let index = 0; index < list.length && npcs.length < 40; index++) {
+            const npc = list[index];
+            if (npc && npc.active && npc.townNPC) {
+                npcs.push([NPCClass.TypeToDefaultHeadIndex(npc.type), String(safe(() => npc.GivenName, "")),
+                    !!npc.homeless, npc.homeTileX, npc.homeTileY, npc.type, npc.life, npc.lifeMax]);
+            }
+        }
+    } catch (_) { /* no npc list */ }
+    try {
+        const all = Main.player;
+        for (let index = 0; index < all.length && players.length < 16; index++) {
+            const other = all[index];
+            if (other && other.active && index !== Main.myPlayer) {
+                players.push([String(safe(() => other.name, "")), other.team, !!other.hostile, other.statLife, other.statLifeMax2]);
+            }
+        }
+    } catch (_) { /* no player list */ }
+    return { npcs, players, team: safe(() => player.team, 0), pvp: !!safe(() => player.hostile, false) };
+}
+
 // NPCs for the map: [tileX, tileY, headIndex, name, kind (0 town, 1 boss), life, lifeMax]
 function readNpcs() {
     const result = [];
@@ -446,6 +472,10 @@ function snapshot(player, pane, page) {
         buffs: readBuffs(player),
         info: readInfo(player),
         chest: readChest(player),
+        defense: safe(() => player.statDefense, 0),
+        loadout: safe(() => player.CurrentLoadoutIndex, 0),
+        team: safe(() => player.team, 0),
+        pvp: !!safe(() => player.hostile, false),
         trash: safe(() => itemState(player.trashItem), [0, 0, 0, false, ""]),
         hp: [Math.max(0, player.statLife), player.statLifeMax2 || player.statLifeMax, player.statLifeMax],
         mana: [Math.max(0, player.statMana), player.statManaMax2 || player.statManaMax],
@@ -456,6 +486,9 @@ function snapshot(player, pane, page) {
     if (pane === "map") {
         state.npcs = readNpcs();
         state.look = readLook(player);
+    }
+    if (pane === "people") {
+        state.people = readPeople(player);
     }
     if (pane === "equipment") {
         state.equipment = equipmentArrays.map((field, index) => slots(player[field], [20, 10, 5, 5][index]));
