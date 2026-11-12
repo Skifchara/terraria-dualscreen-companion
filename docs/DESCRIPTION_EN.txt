@@ -1,0 +1,73 @@
+TERRADUO COMPANION  -  version 1.0
+Second-screen companion for Terraria on dual-screen Android devices (built and tested on the AYN Thor)
+=====================================================================================================
+
+WHAT IT IS
+Terraria runs on the top screen as usual. The bottom screen becomes a live, touch-controlled panel
+that reads the real game state (no OCR, no fake data, no virtual taps) and changes the game only
+through the game's own routines, so the game stays the authority.
+
+Everything is drawn from the game's own sprites, fonts and backgrounds taken from YOUR installed copy
+of the game (see "Legal" below) and the interface is available in English and Russian.
+
+FEATURES
+  * Inventory: all 40 slots, coins, ammo, trash slot, sort. Drag items between slots: move, swap,
+    stack. Double-tap a stack to split it in half into the first free slot.
+  * Item window: big sprite, name in rarity colour, damage / speed / defence / tool power /
+    healing, the game's own tooltip lines and the reforge (prefix) percentages in green and red.
+    Buttons: Use, Equip, Favourite, Split 1, Split half, Drop, Delete, Put in chest, Take.
+  * Edge gestures while dragging an item:  top = drop,  bottom = use / equip / summon,
+    right = trash slot,  left = favourite.
+  * Equipment: armour, accessories, vanity, dyes, pets, mounts, light pets, hooks and their dyes.
+  * Crafting laid out like the game: list of craftable items, details, ingredients with how many
+    you have, hold the Craft button to repeat.
+  * Chests and banks (chest, piggy bank, safe, defender's forge, void vault): the window opens by
+    itself with Loot all, Deposit all, Quick stack, Restock, Sort and Close.
+  * Hotbar: tap to select, selected slot follows the game.
+  * Health and mana as the game's ornate bars; tap them to flip to hearts and stars (golden hearts
+    for life above 400, animated).
+  * Buffs and debuffs with their icons and remaining time. Info items (watch, depth meter,
+    compass, weather radio) show their readings in the top bar.
+  * Map: smooth panning, pinch or button zoom, follow-the-player, town NPC heads with names.
+  * Background that follows where you are: the game's own parallax backdrops for your biome and
+    part of the world, day / night tint, clouds, rain and snow, a soft vignette and white edge
+    flashes when lightning strikes.
+  * Screen-edge flashes when you lose health (red), heal (green) or use mana (blue).
+  * Hide HUD: removes the game's own HUD from the top screen so the whole world is visible.
+    While it is hidden the controller works for the companion: L1 / R1 change the hotbar slot,
+    Y cycles the tabs (Inventory > Equipment > Craft > Map > ...).
+  * English / Russian (button in the top bar; follows the game language by default).
+
+WHAT YOU NEED
+  * A dual-screen Android device (made for AYN Thor; the bottom screen is Android display 4).
+  * Terraria for Android bought on Google Play (package com.and.games505.TerrariaPaid).
+  * TL Pro (com.pixelcurves.terlauncher) - the mod loader the companion talks to. Single-player only.
+  * A PC with Python 3.10+ and adb, once, to prepare the sprites from your own copy of the game.
+
+WHAT IS IN THIS PACKAGE
+  Terraduo-Companion-1.0.apk        the companion app (signed with a development key)
+  Terraduo-Companion-mod-v5.tl      the TL Pro mod pack that exposes the game state
+  icon.png                          the app icon (original artwork)
+  tools/                            PC scripts that decode sprites and backgrounds from your game
+  screenshots/                      every screen of the app
+  DESCRIPTION_EN/RU.txt, GUIDE_EN/RU.txt   this text and the user guide
+  source/                           full source code (inside the full archive)
+
+LEGAL / SAFETY
+  * No game assets are included. Sprites, fonts and backgrounds are decoded on YOUR PC from YOUR
+    installed copy and copied to the app's private folder on your device. Do not redistribute them.
+  * Nothing here removes or bypasses licence checks or protection. Do not install cracked or
+    re-signed copies of Terraria. The game APK is never modified.
+  * The mod only changes game state through the game's own functions (moving items, crafting,
+    using items). Back up your saves before trying any mod; this one never touches save files
+    directly, but the game does when you play.
+  * Single-player only. Do not use with online servers.
+
+KNOWN LIMITS
+  * NPC conversations are shown as text; buying, selling and the dialogue buttons are not
+    implemented yet.
+  * Underground backgrounds depend on the game reporting them; some biomes may fall back to a
+    generated backdrop. Some background pages are missing from certain game builds.
+  * Chest, trash slot, double-tap split and the controller shortcuts were written against the
+    game's code and need a restart of the game through TL Pro after the mod is updated.
+  * Built for 1.4.x of the Android port of Terraria; other versions may differ.

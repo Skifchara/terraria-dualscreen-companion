@@ -1,0 +1,2078 @@
+package com.terraduo.companion;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
+import android.view.View;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.function.Consumer;
+
+/**
+ * The bottom-screen UI, drawn on one canvas: biome backdrop, the game's own sprites and font, drag and drop,
+ * item descriptions and actions, a game-style crafting screen, a large live map and NPC conversations.
+ * All state comes from the TL Pro mod; every change goes back to the game as a validated command.
+ */
+final class TerraPanel extends View {
+    private static final int[] STEPS = {1, 2, 4, 8, 16};
+    private static final String[] PANES = {"inventory", "equipment", "craft", "map"};
+    private static final float TEXT_BOOST = 1.45f;
+    private static final int GOLD = 0xffffd866;
+    private static final int INK = 0xfff2f6f8;
+    private static final int MUTED = 0xffb5c5d4;
+    private static final int[] RARITY = {0xff828282, 0xffffffff, 0xff9696ff, 0xff96ff96, 0xffffc896, 0xffff9696,
+        0xffffa0ff, 0xffd2a0ff, 0xff96ff0a, 0xffffff0a, 0xff05c8ff, 0xffff2864, 0xffb428ff};
+
+    private static final class Hit {
+        final RectF rect = new RectF();
+        int type;      // 0 slot, 1 tab, 2 button, 3 recipe, 4 recipe craft button, 8 overlay body, 9 overlay outside
+        int group;
+        int index;
+        String name;
+    }
+
+    private final Consumer<JSONObject> send;
+    private final Runnable refresh;
+    private final SpriteStore sprites;
+    private final GameFont font;
+    private final BiomeScene scene = new BiomeScene();
+    private final SharedPreferences prefs;
+    private final ScaleGestureDetector scaler;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
+    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pixels = new Paint();
+    private final Rect srcRect = new Rect();
+    private final RectF dstRect = new RectF();
+    private final Path star = new Path();
+    private final ArrayList<Hit> hits = new ArrayList<>();
+
+    private JSONObject latest;
+    private JSONObject backgrounds;
+
+    // map
+    private Bitmap mapBitmap;
+    private int mapLeft, mapTop, mapStep = 2, mapCols, mapRows, playerX, playerY;
+    private float viewScale = 3.5f;   // screen pixels per world tile, continuous
+    private float targetScale = 3.5f;
+    private long lastMapAsk;
+    private boolean follow = true;
+    private float viewCx, viewCy;
+    private float dragStartCx, dragStartCy;
+    private float mapBlock = 7;
+    private final RectF mapPort = new RectF();
+
+    private int pane;
+    private int previousPane;
+    private long paneChangedAt;
+    private int revision;
+    private int recipePage;
+    private boolean hideRequested;
+    private boolean fontRequested, backgroundsRequested;
+    private boolean spriteTurn;
+    private String feedback = "";
+    private long feedbackUntil;
+    private int chosenGroup = -1, chosenIndex = -1;
+    private float scrollY, viewHeight, neededHeight;
+    private float listScroll;
+
+    // item sheet
+    private boolean sheetOpen;
+    private int sheetGroup, sheetIndex;
+    private JSONObject sheetInfo;
+    private boolean infoWanted;
+    private int splitMode;            // 0 none, 1 take one, 2 take half (waiting for an empty target slot)
+    private long trashArmedAt;
+
+    // crafting
+    private int selectedRecipe = -1;
+    private boolean craftHeld;
+    private final Runnable craftRepeat = this::repeatCraft;
+
+    // conversation
+    private JSONObject npcInfo;
+    private long lastNpcRequest;
+
+    private float shownHp, shownMana;
+    private float highlightX = -1;
+
+    // touch
+    private Hit downHit;
+    private float downX, downY, lastY;
+    private boolean dragging, scrolling, scaling;
+    private float dragX, dragY;
+    private int edgeZone;        // 0 none, 1 top (drop), 2 bottom (use / equip / summon)
+    private float edgeStrength;  // 0..1, how deep the finger is in that edge zone
+    private Hit hover;
+    private long downAt;
+
+    TerraPanel(Context context, Consumer<JSONObject> send, Runnable refresh) {
+        super(context);
+        this.send = send;
+        this.refresh = refresh;
+        this.sprites = new SpriteStore(context);
+        sprites.warm("ui:Heart");
+        sprites.warm("ui:Mana");
+        sprites.warm("ui:InventoryBack");
+        for (int index = 2; index <= 18; index++) sprites.warm("ui:InventoryBack" + index);
+        this.font = new GameFont(context);
+        this.prefs = context.getSharedPreferences("terraduo", Context.MODE_PRIVATE);
+        applyLanguage(null);
+        pixels.setFilterBitmap(false);
+        stroke.setStyle(Paint.Style.STROKE);
+        text.setTypeface(Typeface.DEFAULT_BOLD);
+        setBackgroundColor(0xff0b1220);
+        scaler = new ScaleGestureDetector(context, new PinchListener(this::pinch));
+    }
+
+    private boolean pinch(float factor) {
+        if (pane != 3) return false;
+        scaling = true;
+        viewScale = Math.max(0.32f, Math.min(16f, viewScale * factor));
+        targetScale = viewScale;
+        return true;
+    }
+
+    /** World tiles per map sample: keeps samples about 6 screen pixels wide whatever the zoom. */
+    private int desiredStep() {
+        float ideal = 6f * (getHeight() / 1080f) / viewScale;
+        int best = 1;
+        for (int step : STEPS) if (Math.abs(step - ideal) < Math.abs(best - ideal)) best = step;
+        return best;
+    }
+
+    // ------------------------------------------------------------------ contract with TlProActivity
+
+    int revision() { return revision; }
+
+    long pollInterval() { return pane == 3 ? 380 : pane == 2 ? 600 : 220; }
+
+    JSONObject request(JSONObject action) {
+        JSONObject result = action;
+        long now = SystemClock.uptimeMillis();
+        if (result == null) {
+            if (font.needsMetrics() && !fontRequested) {
+                fontRequested = true;
+                result = op("font");
+                TlProPanel.put(result, "name", "mouse");
+            } else if (latest != null && backgrounds == null && !backgroundsRequested) {
+                backgroundsRequested = true;
+                result = op("backgrounds");
+            } else if (sheetOpen && sheetInfo == null && infoWanted) {
+                infoWanted = false;
+                result = op("info");
+                TlProPanel.put(result, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
+            } else if (talking() && now - lastNpcRequest > 1200) {
+                lastNpcRequest = now;
+                result = op("npc");
+            } else {
+                spriteTurn = !spriteTurn || sprites.backlog() > 40;
+                result = spriteTurn ? sprites.nextRequest() : null;
+                if (result == null) result = op(pane == 3 ? "map" : "state");
+                if (result.optString("op").equals("state") && latest != null && preloadStage < 2) {
+                    preloadPane = preloadStage == 0 ? 1 : 2;
+                    preloadStage++;
+                }
+            }
+        }
+        // every request carries the HUD flag: the mod hides/restores the game HUD from it
+        TlProPanel.put(result, "pane", PANES[preloadPane >= 0 ? preloadPane : pane]);
+        TlProPanel.put(result, "page", preloadPane >= 0 ? 0 : recipePage);
+        preloadPane = -1;
+        TlProPanel.put(result, "hide", hideRequested);
+        TlProPanel.put(result, "mapVisible", pane == 3 && mapBitmap != null);
+        if (pane == 3 && "map".equals(result.optString("op"))) {
+            int step = desiredStep();
+            float sample = viewScale * step;
+            TlProPanel.put(result, "step", step);
+            TlProPanel.put(result, "cols", Math.max(16, Math.min(128, (int) Math.ceil(mapPort.width() / sample) + 6)));
+            TlProPanel.put(result, "rows", Math.max(16, Math.min(96, (int) Math.ceil(mapPort.height() / sample) + 6)));
+            if (!follow) {
+                TlProPanel.put(result, "x", Math.round(viewCx));
+                TlProPanel.put(result, "y", Math.round(viewCy));
+            }
+        }
+        return result;
+    }
+
+    void disconnected() {
+        sprites.abandonInFlight();
+        preloadStage = 0;
+        fontRequested = false;
+        backgroundsRequested = false;
+        if (latest != null) {
+            latest = null;
+            chosenGroup = -1;
+            mapBitmap = null;
+            follow = true;
+            sheetOpen = false;
+            npcInfo = null;
+        }
+        postInvalidate();
+    }
+
+    void accept(JSONObject response, int responseRevision, boolean action) {
+        if (response.has("glyphs") || response.has("textureCount")) {
+            font.acceptMetrics(response);
+        } else if (response.has("treeBGSet1")) {
+            backgrounds = response;
+            scene.update(latest == null ? null : latest.optJSONObject("env"), backgrounds);
+        } else if (response.has("entries")) {
+            sprites.deliver(response);
+        } else if (response.has("tooltip")) {
+            if (sheetOpen) sheetInfo = response;
+        } else if (response.has("buttons") && response.has("talk")) {
+            npcInfo = response;
+        } else {
+            if (response.has("error")) {
+                feedback = response.optString("error");
+                feedbackUntil = SystemClock.uptimeMillis() + 2800;
+                if (sheetOpen && sheetInfo == null) sheetOpen = false;
+            } else if (action) {
+                feedback = "";
+            }
+            JSONObject pad = response.optJSONObject("pad");
+            if (pad != null) {
+                int presses = pad.optInt("y");
+                if (lastPadY < 0 || presses < lastPadY) lastPadY = presses;
+                else if (presses > lastPadY) {
+                    lastPadY = presses;
+                    // Y on the controller: next tab, endlessly, while the game's own interface is hidden
+                    if (hideRequested && !sheetOpen) openPane((pane + 1) % PANES.length);
+                }
+            }
+            if (response.has("bgNow")) scene.setRecent(response.optJSONArray("bgNow"));
+            if (response.has("inventory")) warmState(response);
+            boolean backgroundPane = (response.has("equipment") && pane != 1) || (response.has("recipes") && pane != 2);
+            if (response.has("inventory") && backgroundPane && latest != null) {
+                // answer to a preload request for a pane that is not on screen: sprites only
+            } else if (response.has("inventory") && responseRevision == revision) {
+                boolean chestBefore = latest != null && latest.optJSONObject("chest") != null;
+                latest = response;
+                if (!chestBefore && response.optJSONObject("chest") != null && pane != 0) {
+                    openPane(0);
+                } else if (!chestBefore && response.optJSONObject("chest") != null) {
+                    scrollY = 0;
+                }
+                if (response.has("lang")) applyLanguage(response.optString("lang"));
+                scene.update(response.optJSONObject("env"), backgrounds);
+                if (!talking()) npcInfo = null;
+                if (pane == 3 && response.has("map")) updateMap(response.optJSONObject("map"), response.optJSONArray("position"));
+                else if (response.has("position")) {
+                    JSONArray position = response.optJSONArray("position");
+                    playerX = position.optInt(0);
+                    playerY = position.optInt(1);
+                }
+            }
+        }
+        postInvalidate();
+    }
+
+    // ------------------------------------------------------------------ state helpers
+
+    // ---- background loading: every sprite the UI is about to need is requested before it is drawn
+
+    private int preloadPane = -1;
+    private int lastPadY = -1;
+    private int preloadStage;   // 0 equipment pane, 1 craft pane, 2 done
+
+    private void warmItems(JSONArray list) {
+        for (int index = 0; list != null && index < list.length(); index++) {
+            JSONArray data = list.optJSONArray(index);
+            if (data != null && data.optInt(0) != 0) sprites.warm("item:" + data.optInt(0));
+        }
+    }
+
+    private void warmState(JSONObject state) {
+        warmItems(state.optJSONArray("inventory"));
+        JSONArray equipment = state.optJSONArray("equipment");
+        for (int index = 0; equipment != null && index < equipment.length(); index++) warmItems(equipment.optJSONArray(index));
+        JSONObject chest = state.optJSONObject("chest");
+        if (chest != null) warmItems(chest.optJSONArray("items"));
+        JSONObject recipes = state.optJSONObject("recipes");
+        JSONArray entries = recipes == null ? null : recipes.optJSONArray("entries");
+        for (int index = 0; entries != null && index < entries.length(); index++) {
+            JSONArray entry = entries.optJSONArray(index);
+            if (entry == null) continue;
+            JSONArray result = entry.optJSONArray(1);
+            if (result != null && result.optInt(0) != 0) sprites.warm("item:" + result.optInt(0));
+            JSONArray needs = entry.optJSONArray(2);
+            for (int need = 0; needs != null && need < needs.length(); need++) {
+                JSONArray ingredient = needs.optJSONArray(need);
+                if (ingredient != null && ingredient.optInt(2) != 0) sprites.warm("item:" + ingredient.optInt(2));
+            }
+        }
+        JSONArray buffs = state.optJSONArray("buffs");
+        for (int index = 0; buffs != null && index < buffs.length(); index++) {
+            JSONArray buff = buffs.optJSONArray(index);
+            if (buff != null) sprites.warm("buff:" + buff.optInt(0));
+        }
+        JSONArray npcs = state.optJSONArray("npcs");
+        for (int index = 0; npcs != null && index < npcs.length(); index++) {
+            JSONArray npc = npcs.optJSONArray(index);
+            if (npc != null && npc.optInt(2) >= 0) sprites.warm("npchead:" + npc.optInt(2));
+        }
+    }
+
+    /** Ask the mod to play one of the game's own interface sounds (tick, open, close, grab). */
+    private void sound(String name) {
+        JSONObject command = op("sound");
+        TlProPanel.put(command, "name", name);
+        send.accept(command);
+    }
+
+    private JSONObject op(String name) {
+        JSONObject object = new JSONObject();
+        TlProPanel.put(object, "op", name);
+        return object;
+    }
+
+    private boolean talking() { return latest != null && latest.optInt("talk", -1) >= 0; }
+
+    private void applyLanguage(String culture) {
+        String choice = prefs.getString("lang", "auto");
+        if (choice.equals("ru")) Strings.russian = true;
+        else if (choice.equals("en")) Strings.russian = false;
+        else Strings.russian = culture != null ? Strings.isRussian(culture) : Strings.russian;
+    }
+
+    private JSONArray slotData(int group, int index) {
+        if (latest == null) return null;
+        if (group == 0) {
+            JSONArray inventory = latest.optJSONArray("inventory");
+            return inventory == null ? null : inventory.optJSONArray(index);
+        }
+        if (group == 6) return latest.optJSONArray("trash");
+        if (group == 5) {
+            JSONObject chest = latest.optJSONObject("chest");
+            JSONArray items = chest == null ? null : chest.optJSONArray("items");
+            return items == null ? null : items.optJSONArray(index);
+        }
+        JSONArray equipment = latest.optJSONArray("equipment");
+        JSONArray list = equipment == null ? null : equipment.optJSONArray(group - 1);
+        return list == null ? null : list.optJSONArray(index);
+    }
+
+    private static int typeOf(JSONArray data) { return data == null ? 0 : data.optInt(0); }
+
+    private void updateMap(JSONObject map, JSONArray position) {
+        if (map == null || position == null) return;
+        int cols = map.optInt("width");
+        int rows = map.optInt("height");
+        JSONArray data = map.optJSONArray("pixels");
+        if (cols < 1 || rows < 1 || data == null || data.length() != cols * rows) return;
+        int[] colors = new int[cols * rows];
+        for (int index = 0; index < colors.length; index++) {
+            int rgb = data.optInt(index);
+            colors[index] = rgb == 0 ? 0 : 0xff000000 | rgb;
+        }
+        if (mapBitmap == null || mapBitmap.getWidth() != cols || mapBitmap.getHeight() != rows) {
+            mapBitmap = Bitmap.createBitmap(cols, rows, Bitmap.Config.ARGB_8888);
+        }
+        mapBitmap.setPixels(colors, 0, cols, 0, 0, cols, rows);
+        mapLeft = map.optInt("left");
+        mapTop = map.optInt("top");
+        mapStep = Math.max(1, map.optInt("step", 1));
+        mapCols = cols;
+        mapRows = rows;
+        playerX = position.optInt(0);
+        playerY = position.optInt(1);
+        if (follow) {
+            viewCx = playerX;
+            viewCy = playerY;
+        }
+    }
+
+    private void changeZoom(int offset) {
+        targetScale = Math.max(0.32f, Math.min(16f, targetScale * (offset < 0 ? 1.7f : 1 / 1.7f)));
+    }
+
+    private void openPane(int target) {
+        if (target == pane) return;
+        previousPane = pane;
+        pane = target;
+        sound("tick");
+        paneChangedAt = SystemClock.uptimeMillis();
+        scrollY = 0;
+        listScroll = 0;
+        chosenGroup = -1;
+        sheetOpen = false;
+        revision++;
+        refresh.run();
+        postInvalidate();
+    }
+
+    private void openSheet(int group, int index) {
+        if (typeOf(slotData(group, index)) == 0) return;
+        sheetOpen = true;
+        sound("open");
+        sheetGroup = group;
+        sheetIndex = index;
+        sheetInfo = null;
+        infoWanted = true;
+        splitMode = 0;
+        trashArmedAt = 0;
+        refresh.run();
+    }
+
+    // ------------------------------------------------------------------ drawing
+
+    @Override protected void onDraw(Canvas canvas) {
+        long now = SystemClock.uptimeMillis();
+        int w = getWidth();
+        int h = getHeight();
+        float s = h / 1080f;
+        hits.clear();
+        scene.setPlayer(playerX, playerY);
+        scene.draw(canvas, w, h, now, sprites);
+        fill.setColor(0x38000814);
+        canvas.drawRect(0, 0, w, h, fill);
+        animateValues();
+        watchChanges();
+
+        drawTopBar(canvas, w, s);
+        drawTabs(canvas, w, s);
+        float contentTop = 238 * s;
+        float contentBottom = h - 290 * s;
+        viewHeight = contentBottom - contentTop;
+        neededHeight = 0;
+        canvas.save();
+        canvas.clipRect(0, contentTop, w, contentBottom);
+        float slide = Math.min(1f, (now - paneChangedAt) / 220f);
+        float eased = 1 - (1 - slide) * (1 - slide);
+        if (slide < 1f) {
+            float direction = pane > previousPane ? 1 : -1;
+            canvas.save();
+            canvas.translate(-direction * w * eased, 0);
+            ArrayList<Hit> saved = new ArrayList<>(hits);
+            drawPaneBody(canvas, previousPane, w, s, contentTop, contentBottom);
+            hits.clear();
+            hits.addAll(saved);
+            canvas.restore();
+            canvas.save();
+            canvas.translate(direction * w * (1 - eased), 0);
+            drawPaneBody(canvas, pane, w, s, contentTop, contentBottom);
+            canvas.restore();
+        } else {
+            drawPaneBody(canvas, pane, w, s, contentTop, contentBottom);
+        }
+        canvas.restore();
+        drawStatus(canvas, w, h, s);
+        drawHotbar(canvas, w, h, s, now);
+        drawDrag(canvas, s);
+        drawEdges(canvas, w, h, s);
+        if (latest == null) {
+            drawCentered(canvas, Strings.get("open_world"), w / 2f, h / 2f, 34 * s, INK);
+        } else if (sheetOpen) {
+            drawSheet(canvas, w, h, s);
+        } else if (talking()) {
+            drawDialogue(canvas, w, s, contentTop, contentBottom);
+        }
+        drawFlashes(canvas, w, h);
+        postInvalidateDelayed(33);
+    }
+
+    private void animateValues() {
+        if (latest == null) return;
+        JSONArray hp = latest.optJSONArray("hp");
+        JSONArray mana = latest.optJSONArray("mana");
+        float hpTarget = hp == null ? 0 : hp.optInt(0);
+        float manaTarget = mana == null ? 0 : mana.optInt(0);
+        shownHp += (hpTarget - shownHp) * 0.18f;
+        shownMana += (manaTarget - shownMana) * 0.18f;
+        if (Math.abs(shownHp - hpTarget) < 0.5f) shownHp = hpTarget;
+        if (Math.abs(shownMana - manaTarget) < 0.5f) shownMana = manaTarget;
+    }
+
+    // screen-edge flashes: 0 damage (red), 1 healing (green), 2 mana (blue)
+    private static final int[] FLASH_COLOR = {0xff2a14, 0x3cff5a, 0x3a78ff};
+    private final long[] flashAt = new long[3];
+    private final float[] flashPower = new float[3];
+    private float lastHp = -1, lastMana = -1;
+    private android.graphics.RadialGradient[] flashShader = new android.graphics.RadialGradient[3];
+    private int flashW, flashH;
+
+    private void flash(int channel, float power) {
+        flashAt[channel] = SystemClock.uptimeMillis();
+        flashPower[channel] = Math.max(0.25f, Math.min(1f, power));
+    }
+
+    private void watchChanges() {
+        if (latest == null) return;
+        JSONArray hp = latest.optJSONArray("hp");
+        JSONArray mana = latest.optJSONArray("mana");
+        if (hp != null) {
+            float value = hp.optInt(0);
+            float max = Math.max(1, hp.optInt(1));
+            if (lastHp >= 0 && value < lastHp && lastHp - value >= 3) flash(0, 0.35f + 2.2f * (lastHp - value) / max);
+            else if (lastHp >= 0 && lastHp > 0 && value - lastHp >= Math.max(20, max * 0.08f)) flash(1, 0.3f + 1.6f * (value - lastHp) / max);
+            lastHp = value;
+        }
+        if (mana != null) {
+            float value = mana.optInt(0);
+            float max = Math.max(1, mana.optInt(1));
+            if (lastMana >= 0 && (lastMana - value >= 15 || value - lastMana >= Math.max(40, max * 0.2f))) {
+                flash(2, 0.3f + 1.6f * Math.abs(value - lastMana) / max);
+            }
+            lastMana = value;
+        }
+    }
+
+    private void drawFlashes(Canvas canvas, int w, int h) {
+        long now = SystemClock.uptimeMillis();
+        if (flashShader[0] == null || flashW != w || flashH != h) {
+            flashW = w;
+            flashH = h;
+            float radius = (float) Math.hypot(w, h) * 0.5f;
+            for (int channel = 0; channel < 3; channel++) {
+                int rgb = FLASH_COLOR[channel];
+                flashShader[channel] = new android.graphics.RadialGradient(w / 2f, h / 2f, radius,
+                    new int[]{rgb, rgb, 0xff000000 | rgb}, new float[]{0f, 0.45f, 1f}, android.graphics.Shader.TileMode.CLAMP);
+            }
+        }
+        for (int channel = 0; channel < 3; channel++) {
+            float age = (now - flashAt[channel]) / 420f;
+            if (flashAt[channel] == 0 || age >= 1f) continue;
+            float strength = flashPower[channel] * (1f - age) * (1f - age);
+            fill.setShader(flashShader[channel]);
+            fill.setAlpha((int) (210 * strength));
+            canvas.drawRect(0, 0, w, h, fill);
+            fill.setShader(null);
+        }
+    }
+
+    private boolean heartsMode;
+    private long flipAt;
+
+    private void drawBuffs(Canvas canvas, int w, int h, float s) {
+        JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
+        if (buffs == null || buffs.length() == 0) return;
+        float size = 58 * s;
+        float gap = 8 * s;
+        float x = 24 * s;
+        float y = h - 288 * s;
+        for (int index = 0; index < buffs.length() && x + size < w - 20 * s; index++) {
+            JSONArray buff = buffs.optJSONArray(index);
+            if (buff == null) continue;
+            boolean bad = buff.optBoolean(2);
+            Bitmap icon = sprites.get("buff:" + buff.optInt(0));
+            if (icon != null) {
+                float fit = Math.min(size / icon.getWidth(), size / icon.getHeight());
+                drawSprite(canvas, icon, x + (size - icon.getWidth() * fit) / 2, y + (size - icon.getHeight() * fit) / 2,
+                    icon.getWidth() * fit, icon.getHeight() * fit);
+            }
+            int seconds = buff.optInt(1) / 60;
+            if (seconds > 0 && seconds < 3600) {
+                String time = seconds >= 60 ? (seconds / 60) + "m" : seconds + "s";
+                drawText(canvas, time, x + size - measure(time, 18 * s) - 3 * s, y + size - 22 * s, 18 * s, bad ? 0xffffb0b0 : INK, true);
+            }
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "buff_" + index;
+            hit.rect.set(x, y, x + size, y + size);
+            hits.add(hit);
+            x += size + gap;
+        }
+    }
+
+    private static String clock(JSONArray time) {
+        int hour = time.optInt(0);
+        int minute = time.optInt(1);
+        String suffix = hour >= 12 ? "PM" : "AM";
+        int shown = hour % 12 == 0 ? 12 : hour % 12;
+        return shown + ":" + (minute < 10 ? "0" : "") + minute + " " + suffix;
+    }
+
+    /** One line made from the info accessories the player carries (watch, depth meter, compass, weather radio). */
+    private String infoLine() {
+        JSONObject info = latest == null ? null : latest.optJSONObject("info");
+        if (info == null) return "";
+        StringBuilder line = new StringBuilder();
+        JSONArray time = info.optJSONArray("time");
+        if (time != null) line.append(clock(time));
+        if (info.has("depth")) {
+            int depth = info.optInt("depth");
+            if (line.length() > 0) line.append("  ·  ");
+            line.append(Math.abs(depth)).append(' ').append(Strings.get("ft")).append(' ').append(Strings.get(depth >= 0 ? "below" : "above"));
+        }
+        if (info.has("compass")) {
+            int compass = info.optInt("compass");
+            if (line.length() > 0) line.append("  ·  ");
+            line.append(Math.abs(compass)).append(' ').append(Strings.get("ft")).append(' ').append(Strings.get(compass >= 0 ? "east" : "west"));
+        }
+        if (info.has("wind")) {
+            if (line.length() > 0) line.append("  ·  ");
+            line.append(Strings.get("wind")).append(' ').append(Math.abs(info.optInt("wind")));
+            if (info.optBoolean("rain")) line.append("  ").append(Strings.get("rain_on"));
+        }
+        return line.toString();
+    }
+
+    /** Hearts (or stars): one per {@code per} points; hearts past the 20th (life fruit) use the golden sprite. */
+    private void drawIcons(Canvas canvas, float x, float cy, float width, float value, float max, int per, String key,
+                           String goldKey, float s, int rows, float cap) {
+        Bitmap icon = sprites.get(key);
+        Bitmap gold = goldKey == null ? null : sprites.get(goldKey);
+        int count = Math.max(1, (int) Math.ceil(max / per));
+        int columns = (count + rows - 1) / rows;
+        float step = Math.min(cap * 0.92f, width / columns);
+        float size = Math.min(cap, step * 1.12f);
+        float top = cy - rows * step * 0.5f;
+        for (int index = 0; index < count; index++) {
+            int row = index / columns;
+            int col = index % columns;
+            float cx = x + col * step + step / 2;
+            float py = top + row * step + step / 2;
+            float filled = Math.max(0, Math.min(1, (value - index * per) / per));
+            Bitmap sprite = goldKey != null && index >= 20 && gold != null ? gold : icon;
+            if (sprite == null) {
+                fill.setColor(filled > 0 ? 0xffe0414a : 0xff3a1a22);
+                canvas.drawCircle(cx, py, size * 0.35f, fill);
+                continue;
+            }
+            float scale = filled >= 1 ? 1f : filled > 0 ? 0.62f + 0.3f * filled : 0.78f;
+            float w = size * scale;
+            float h = size * sprite.getHeight() / sprite.getWidth() * scale;
+            if (filled <= 0) {
+                pixels.setColorFilter(new android.graphics.PorterDuffColorFilter(0xff202638, android.graphics.PorterDuff.Mode.SRC_ATOP));
+            }
+            drawSprite(canvas, sprite, cx - w / 2, py - h / 2, w, h);
+            pixels.setColorFilter(null);
+        }
+    }
+
+    private void drawTopBar(Canvas canvas, int w, float s) {
+        panel(canvas, 12 * s, 8 * s, w - 12 * s, 130 * s, 0xbb101a38, 0xff5a6ea8, s);
+        JSONArray hp = latest == null ? null : latest.optJSONArray("hp");
+        JSONArray mana = latest == null ? null : latest.optJSONArray("mana");
+        long nowMs = SystemClock.uptimeMillis();
+        float phase = Math.min(1f, (nowMs - flipAt) / 520f);
+        boolean flipping = phase < 1f;
+        boolean showHearts = flipping && phase < 0.5f ? !heartsMode : heartsMode;
+        float flipScale = flipping ? Math.max(0.04f, (float) Math.abs(Math.cos(Math.PI * phase))) : 1f;
+        canvas.save();
+        canvas.scale(1f, flipScale, 250 * s, 40 * s);
+        if (showHearts) {
+            drawIcons(canvas, 30 * s, 47 * s, 480 * s, shownHp, hp == null ? 1 : hp.optInt(1), 20, "ui:Heart", "ui:Heart2", s, 2, 40 * s);
+        } else {
+            gameBar(canvas, 30 * s, 40 * s, 470 * s, 1.25f * s, shownHp, hp == null ? 1 : hp.optInt(1), "BarHeart", "ui:Heart",
+                0xffe0414a, 0xff5a1018, Strings.get("hp") + " " + (int) shownHp + " / " + (hp == null ? 0 : hp.optInt(1)), s);
+        }
+        canvas.restore();
+        canvas.save();
+        canvas.scale(1f, flipScale, 250 * s, 96 * s);
+        if (showHearts) {
+            drawIcons(canvas, 30 * s, 104 * s, 480 * s, shownMana, mana == null ? 1 : mana.optInt(1), 20, "ui:Mana", null, s, 1, 46 * s);
+        } else {
+            gameBar(canvas, 30 * s, 96 * s, 470 * s, 1.25f * s, shownMana, mana == null ? 1 : mana.optInt(1), "BarMana", "ui:Mana",
+                0xff5a8cff, 0xff142a66, Strings.get("mana") + " " + (int) shownMana + " / " + (mana == null ? 0 : mana.optInt(1)), s);
+        }
+        canvas.restore();
+        Hit flip = new Hit();
+        flip.type = 2;
+        flip.name = "barflip";
+        flip.rect.set(24 * s, 10 * s, 520 * s, 126 * s);
+        hits.add(flip);
+        JSONObject env = latest == null ? null : latest.optJSONObject("env");
+        if (env != null) {
+            String line = Strings.get(env.optBoolean("day", true) ? "day" : "night");
+            JSONArray zones = env.optJSONArray("zones");
+            if (zones != null && zones.length() > 0) line += "  ·  " + zones.optString(0);
+            drawText(canvas, line, 540 * s, 24 * s, 25 * s, MUTED, true);
+        }
+        String info = infoLine();
+        if (!info.isEmpty()) drawText(canvas, info, 540 * s, 76 * s, 24 * s, 0xffffe9a8, true);
+        float bx = w - 30 * s;
+        bx = button(canvas, "lang", Strings.get("lang_button"), bx - 90 * s, 28 * s, 90 * s, 66 * s, 0xff2a3a6a, s);
+        boolean can = latest != null && latest.optBoolean("hudAvailable");
+        button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 230 * s, 28 * s, 230 * s, 66 * s,
+            can ? (hideRequested ? 0xff347461 : 0xff2a3a6a) : 0xff1a2238, s);
+    }
+
+    /** HP/mana bar built like the game does it: 24-unit backing, 12-unit fill, ornate end cap at its natural size. */
+    private void gameBar(Canvas canvas, float x, float cy, float width, float u, float value, float max, String set,
+                         String icon, int color, int back, String label, float s) {
+        Bitmap left = sprites.get("ui:" + set + "BackingLeft");
+        Bitmap mid = sprites.get("ui:" + set + "BackingMid");
+        Bitmap right = sprites.get("ui:" + set + "BackingRight");
+        Bitmap fillBar = sprites.get("ui:" + set);
+        Bitmap iconBitmap = sprites.get(icon);
+        float inset = 0;
+        if (iconBitmap != null) {
+            float size = 24 * u * 1.15f;
+            drawSprite(canvas, iconBitmap, x, cy - size / 2, size, size);
+            inset = size + 8 * s;
+        }
+        float fraction = Math.max(0, Math.min(1, value / Math.max(1, max)));
+        float bx = x + inset;
+        float bw = width - inset;
+        float barTop = cy - 12 * u;
+        float inner0;
+        float inner1;
+        if (left != null && mid != null && right != null && fillBar != null) {
+            float capW = right.getWidth() * u;
+            float capH = right.getHeight() * u;
+            drawSprite(canvas, left, bx, barTop, left.getWidth() * u, 24 * u);
+            drawSprite(canvas, mid, bx + left.getWidth() * u, barTop, bw - left.getWidth() * u - capW * 0.5f, 24 * u);
+            drawSprite(canvas, right, bx + bw - capW, cy - capH / 2, capW, capH);
+            inner0 = bx + left.getWidth() * u;
+            inner1 = bx + bw - capW + 12 * u;
+            canvas.save();
+            canvas.clipRect(inner0, cy - 6 * u, inner0 + (inner1 - inner0) * fraction, cy + 6 * u);
+            drawSprite(canvas, fillBar, inner0, cy - 6 * u, inner1 - inner0, 12 * u);
+            canvas.restore();
+        } else {
+            inner0 = bx;
+            inner1 = bx + bw;
+            fill.setColor(back);
+            canvas.drawRect(inner0, cy - 8 * u, inner1, cy + 8 * u, fill);
+            fill.setColor(color);
+            canvas.drawRect(inner0, cy - 8 * u, inner0 + (inner1 - inner0) * fraction, cy + 8 * u, fill);
+            stroke.setColor(0xff000000);
+            stroke.setStrokeWidth(3 * s);
+            canvas.drawRect(inner0, cy - 8 * u, inner1, cy + 8 * u, stroke);
+        }
+        drawText(canvas, label, inner0 + 12 * s, cy - 10 * u, 17 * u, INK, true);
+    }
+
+    private float button(Canvas canvas, String name, String label, float x, float y, float width, float height, int color, float s) {
+        panel(canvas, x, y, x + width, y + height, color, 0xff8ea2d8, s);
+        drawCentered(canvas, label, x + width / 2, y + height / 2, Math.min(34 * s, height * 0.5f), INK);
+        Hit hit = new Hit();
+        hit.type = 2;
+        hit.name = name;
+        hit.rect.set(x, y, x + width, y + height);
+        hits.add(hit);
+        return x - 12 * s;
+    }
+
+    private void drawTabs(Canvas canvas, int w, float s) {
+        float tabWidth = (w - 36 * s) / PANES.length;
+        float y = 136 * s;
+        float height = 88 * s;
+        for (int index = 0; index < PANES.length; index++) {
+            float x = 18 * s + index * tabWidth;
+            boolean active = index == pane;
+            panel(canvas, x + 4 * s, y, x + tabWidth - 4 * s, y + height, active ? 0xdd23457a : 0x99101a38,
+                active ? GOLD : 0xff5a6ea8, s);
+            drawCentered(canvas, Strings.get(PANES[index]), x + tabWidth / 2, y + height / 2, 32 * s, INK);
+            Hit hit = new Hit();
+            hit.type = 1;
+            hit.index = index;
+            hit.rect.set(x, y, x + tabWidth, y + height);
+            hits.add(hit);
+        }
+    }
+
+    private void drawPaneBody(Canvas canvas, int which, int w, float s, float top, float bottom) {
+        if (latest == null && which != 3) return;
+        if (which == 0) drawInventory(canvas, w, s, top);
+        else if (which == 1) drawEquipment(canvas, w, s, top);
+        else if (which == 2) drawCraft(canvas, w, s, top, bottom);
+        else drawMap(canvas, w, s, top, bottom);
+    }
+
+    private float slotSize(int w, float s, int columns) {
+        return Math.min(86 * s, (w - 60 * s) / columns - 8 * s);
+    }
+
+    private void slotRow(Canvas canvas, int w, float s, float y, int group, int start, int count, String[] labels, int columns) {
+        float size = slotSize(w, s, columns);
+        float total = columns * (size + 8 * s) - 8 * s;
+        float x0 = (w - total) / 2;
+        for (int offset = 0; offset < count; offset++) {
+            drawSlotAt(canvas, x0 + offset * (size + 8 * s), y, size, group, start + offset, labels == null ? null : labels[offset]);
+        }
+    }
+
+    private void drawInventory(Canvas canvas, int w, float s, float top) {
+        float size = slotSize(w, s, 10);
+        float y = top + 8 * s - scrollY;
+        JSONObject chest = latest == null ? null : latest.optJSONObject("chest");
+        if (chest != null) y = drawChest(canvas, w, s, y, chest);
+        for (int row = 1; row < 5; row++) {
+            slotRow(canvas, w, s, y, 0, row * 10, 10, null, 10);
+            y += size + 8 * s;
+        }
+        drawText(canvas, Strings.get("coins_ammo"), 30 * s, y + 4 * s, 28 * s, MUTED, true);
+        float bx = w - 30 * s;
+        button(canvas, "sort", Strings.get("sort"), bx - 170 * s, y - 2 * s, 170 * s, 40 * s, 0xff2a3a6a, s);
+        y += 44 * s;
+        slotRow(canvas, w, s, y, 0, 50, 8, null, 10);
+        float trashX = (w - (10 * (size + 8 * s) - 8 * s)) / 2 + 9 * (size + 8 * s);
+        JSONArray trash = slotData(6, 0);
+        if (trash != null) drawSlotAt(canvas, trashX, y, size, 6, 0, null);
+        if (trash != null && typeOf(trash) == 0) {
+            Bitmap can = sprites.get("ui:Trash");
+            if (can != null) {
+                float fit = Math.min(size * 0.62f / can.getWidth(), size * 0.62f / can.getHeight());
+                drawSprite(canvas, can, trashX + (size - can.getWidth() * fit) / 2, y + (size - can.getHeight() * fit) / 2,
+                    can.getWidth() * fit, can.getHeight() * fit);
+            } else {
+                drawCentered(canvas, Strings.get("trash_slot"), trashX + size / 2, y + size / 2, 15 * s, 0x99b5c5d4);
+            }
+        }
+        neededHeight = Math.max(neededHeight, y + size - top + scrollY);
+    }
+
+    private String chestTitle(JSONObject chest) {
+        int id = chest.optInt("id");
+        if (id == -2) return Strings.get("piggy");
+        if (id == -3) return Strings.get("safe");
+        if (id == -4) return Strings.get("forge");
+        if (id == -5) return Strings.get("voidv");
+        String name = chest.optString("name");
+        return name.isEmpty() ? Strings.get("chest") : name;
+    }
+
+    /** Opened chest or bank, like the game's window: title, six buttons that run the game's own routines, the slots. */
+    private float drawChest(Canvas canvas, int w, float s, float y, JSONObject chest) {
+        float x = 30 * s;
+        drawText(canvas, chestTitle(chest), x, y, 36 * s, GOLD, true);
+        y += 50 * s;
+        String[][] buttons = {{"c_loot", "loot"}, {"c_deposit", "deposit"}, {"c_quick", "quick"},
+            {"c_restock", "restock"}, {"c_sort", "sort"}, {"c_close", "close"}};
+        float gap = 10 * s;
+        float bw = (w - 60 * s - 2 * gap) / 3;
+        float bh = 76 * s;
+        for (int index = 0; index < buttons.length; index++) {
+            float bx = x + (index % 3) * (bw + gap);
+            float by = y + (index / 3) * (bh + gap);
+            button(canvas, "chest_" + buttons[index][1], Strings.get(buttons[index][0]), bx, by, bw, bh,
+                index == 5 ? 0xff7a2a2f : 0xff2a3a6a, s);
+        }
+        y += 2 * bh + gap + 14 * s;
+        JSONArray items = chest.optJSONArray("items");
+        int count = items == null ? 0 : items.length();
+        float size = slotSize(w, s, 10);
+        for (int start = 0; start < count; start += 10) {
+            slotRow(canvas, w, s, y, 5, start, Math.min(10, count - start), null, 10);
+            y += size + 8 * s;
+        }
+        y += 6 * s;
+        fill.setColor(0x55b5c5d4);
+        canvas.drawRect(30 * s, y, w - 30 * s, y + 3 * s, fill);
+        drawText(canvas, Strings.get("inventory"), x, y + 8 * s, 28 * s, MUTED, true);
+        return y + 46 * s;
+    }
+
+    private String[] gearLabels() {
+        return new String[]{Strings.get("head"), Strings.get("body"), Strings.get("legs"), Strings.get("accessory") + " 1",
+            Strings.get("accessory") + " 2", Strings.get("accessory") + " 3", Strings.get("accessory") + " 4",
+            Strings.get("accessory") + " 5", Strings.get("accessory") + " 6", Strings.get("accessory") + " 7"};
+    }
+
+    private void drawEquipment(Canvas canvas, int w, float s, float top) {
+        float size = slotSize(w, s, 10) * 0.86f;
+        float y = top + 4 * s - scrollY;
+        String[] labels = gearLabels();
+        String[] utility = {Strings.get("pet"), Strings.get("light"), Strings.get("minecart"), Strings.get("mount"), Strings.get("hook")};
+        String[] titles = {"armor", "vanity", "dyes", "pets", "pet_dyes"};
+        int[][] rows = {{1, 0, 10}, {1, 10, 10}, {2, 0, 10}, {3, 0, 5}, {4, 0, 5}};
+        for (int row = 0; row < rows.length; row++) {
+            drawText(canvas, Strings.get(titles[row]), 30 * s, y, 26 * s, MUTED, true);
+            y += 32 * s;
+            slotRow(canvas, w, s, y, rows[row][0], rows[row][1], rows[row][2], rows[row][0] >= 3 ? utility : labels, 10);
+            y += size + 12 * s;
+        }
+        neededHeight = Math.max(neededHeight, y - top + scrollY);
+    }
+
+    // ---- crafting, laid out like the game: list of craftable results on the left, details on the right
+
+    private void drawCraft(Canvas canvas, int w, float s, float top, float bottom) {
+        JSONObject list = latest == null ? null : latest.optJSONObject("recipes");
+        JSONArray entries = list == null ? null : list.optJSONArray("entries");
+        if (entries == null || entries.length() == 0) {
+            drawCentered(canvas, Strings.get("no_recipes"), w / 2f, (top + bottom) / 2, 34 * s, MUTED);
+            return;
+        }
+        if (selectedRecipe < 0 || findRecipe(entries, selectedRecipe) == null) {
+            JSONArray first = entries.optJSONArray(0);
+            selectedRecipe = first == null ? -1 : first.optInt(0);
+        }
+        float listWidth = w * 0.42f;
+        panel(canvas, 18 * s, top + 4 * s, listWidth, bottom - 4 * s, 0x99101a38, 0xff5a6ea8, s);
+        int columns = 4;
+        float cell = Math.min(96 * s, (listWidth - 18 * s - 24 * s) / columns - 6 * s);
+        float y0 = top + 14 * s - listScroll;
+        int total = list.optInt("total");
+        canvas.save();
+        canvas.clipRect(18 * s, top + 4 * s, listWidth, bottom - 4 * s);
+        for (int index = 0; index < entries.length(); index++) {
+            JSONArray entry = entries.optJSONArray(index);
+            if (entry == null) continue;
+            float x = 30 * s + (index % columns) * (cell + 6 * s);
+            float y = y0 + (index / columns) * (cell + 6 * s);
+            if (y + cell < top || y > bottom) continue;
+            boolean active = entry.optInt(0) == selectedRecipe;
+            Bitmap back = sprites.get("ui:InventoryBack");
+            if (back != null) drawSprite(canvas, back, x, y, cell, cell);
+            else panel(canvas, x, y, x + cell, y + cell, 0xcc243a73, 0xff6a80c0, s);
+            drawItem(canvas, entry.optJSONArray(1), x + cell * 0.1f, y + cell * 0.1f, cell * 0.8f);
+            if (active) {
+                stroke.setColor(GOLD);
+                stroke.setStrokeWidth(4 * s);
+                canvas.drawRect(x, y, x + cell, y + cell, stroke);
+            }
+            Hit hit = new Hit();
+            hit.type = 3;
+            hit.index = entry.optInt(0);
+            hit.rect.set(x, y, x + cell, y + cell);
+            hits.add(hit);
+        }
+        canvas.restore();
+        int rows = (entries.length() + columns - 1) / columns;
+        neededHeight = Math.max(neededHeight, rows * (cell + 6 * s) + 20 * s);
+        if (total > 24) {
+            float px = 30 * s;
+            float py = bottom - 64 * s;
+            button(canvas, "prev", "‹", px, py, 70 * s, 52 * s, recipePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+            drawCentered(canvas, Strings.get("page") + " " + (recipePage + 1), listWidth / 2 + 10 * s, py + 26 * s, 24 * s, INK);
+            button(canvas, "next", "›", listWidth - 90 * s, py, 70 * s, 52 * s, (recipePage + 1) * 24 < total ? 0xff2a3a6a : 0xff1a2238, s);
+        }
+        float dx = listWidth + 16 * s;
+        float dw = w - dx - 18 * s;
+        panel(canvas, dx, top + 4 * s, dx + dw, bottom - 4 * s, 0x99101a38, 0xff5a6ea8, s);
+        JSONArray selected = findRecipe(entries, selectedRecipe);
+        if (selected == null) {
+            drawCentered(canvas, Strings.get("select_recipe"), dx + dw / 2, (top + bottom) / 2, 30 * s, MUTED);
+            return;
+        }
+        JSONArray result = selected.optJSONArray(1);
+        float y = top + 20 * s;
+        Bitmap back = sprites.get("ui:InventoryBack");
+        float big = 104 * s;
+        if (back != null) drawSprite(canvas, back, dx + 20 * s, y, big, big);
+        else panel(canvas, dx + 20 * s, y, dx + 20 * s + big, y + big, 0xcc243a73, 0xff6a80c0, s);
+        drawItem(canvas, result, dx + 20 * s + big * 0.1f, y + big * 0.1f, big * 0.8f);
+        drawText(canvas, result == null ? "" : result.optString(4), dx + big + 40 * s, y + 8 * s, 34 * s, GOLD, true);
+        drawText(canvas, "×" + (result == null ? 1 : result.optInt(1)), dx + big + 40 * s, y + 52 * s, 28 * s, INK, true);
+        y += big + 20 * s;
+        drawText(canvas, Strings.get("ingredients"), dx + 20 * s, y, 26 * s, MUTED, true);
+        y += 34 * s;
+        JSONArray ingredients = selected.optJSONArray(2);
+        boolean enough = true;
+        for (int part = 0; ingredients != null && part < ingredients.length(); part++) {
+            JSONArray ingredient = ingredients.optJSONArray(part);
+            if (ingredient == null) continue;
+            int need = ingredient.optInt(1);
+            int have = ingredient.optInt(3, -1);
+            boolean ok = have < 0 || have >= need;
+            enough &= ok;
+            float rowTop = y;
+            Bitmap icon = sprites.get("item:" + ingredient.optInt(2));
+            if (icon != null) drawSprite(canvas, icon, dx + 20 * s, rowTop - 4 * s, 44 * s, 44 * s);
+            drawText(canvas, ingredient.optString(0), dx + 76 * s, rowTop + 4 * s, 28 * s, INK, true);
+            String count = have < 0 ? "×" + need : have + " / " + need;
+            drawText(canvas, count, dx + dw - 20 * s - measure(count, 28 * s), rowTop + 4 * s, 28 * s, ok ? 0xff7fe08a : 0xffff8a8a, true);
+            y += 58 * s;
+            if (y > bottom - 190 * s) break;
+        }
+        String station = selected.optString(3, "");
+        if (!station.isEmpty()) {
+            drawText(canvas, Strings.get("requires") + ": " + station, dx + 20 * s, y + 4 * s, 26 * s, MUTED, true);
+            y += 36 * s;
+        }
+        JSONArray needs = selected.optJSONArray(4);
+        for (int index = 0; needs != null && index < needs.length(); index++) {
+            drawText(canvas, "• " + Strings.get(needs.optString(index)), dx + 20 * s, y, 24 * s, MUTED, true);
+            y += 30 * s;
+        }
+        float by = bottom - 4 * s - 84 * s;
+        Hit craft = new Hit();
+        craft.type = 4;
+        craft.index = selectedRecipe;
+        craft.rect.set(dx + 20 * s, by, dx + dw - 20 * s, by + 70 * s);
+        panel(canvas, craft.rect.left, craft.rect.top, craft.rect.right, craft.rect.bottom,
+            enough ? (craftHeld ? 0xff3f9a52 : 0xff2f7a42) : 0xff3a3a46, enough ? 0xffbfffc8 : 0xff6a6a78, s);
+        drawCentered(canvas, Strings.get("craft_one") + "  " + (result == null ? "" : result.optString(4)),
+            (craft.rect.left + craft.rect.right) / 2, by + 35 * s, 30 * s, INK);
+        hits.add(craft);
+    }
+
+    private static JSONArray findRecipe(JSONArray entries, int id) {
+        for (int index = 0; entries != null && index < entries.length(); index++) {
+            JSONArray entry = entries.optJSONArray(index);
+            if (entry != null && entry.optInt(0) == id) return entry;
+        }
+        return null;
+    }
+
+    // ---- map: fixed framed viewport; the picture pans smoothly in world coordinates
+
+    private void drawMap(Canvas canvas, int w, float s, float top, float bottom) {
+        float pad = 18 * s;
+        mapPort.set(pad, top + 8 * s, w - pad, bottom - 8 * s);
+        viewScale += (targetScale - viewScale) * 0.28f;
+        mapBlock = viewScale * mapStep;
+        long nowMs = SystemClock.uptimeMillis();
+        if (mapBitmap != null && nowMs - lastMapAsk > 450 && (desiredStep() != mapStep
+            || mapPort.width() > mapBitmap.getWidth() * mapBlock + 4 || mapPort.height() > mapBitmap.getHeight() * mapBlock + 4)) {
+            lastMapAsk = nowMs;
+            revision++;
+            refresh.run();
+        }
+        panel(canvas, mapPort.left - 6 * s, mapPort.top - 6 * s, mapPort.right + 6 * s, mapPort.bottom + 6 * s, 0xff3a2a14, 0xffd8a84a, s);
+        fill.setColor(0xff070d18);
+        canvas.drawRect(mapPort, fill);
+        if (mapBitmap == null) {
+            drawCentered(canvas, Strings.get("map_loading"), w / 2f, (top + bottom) / 2, 34 * s, MUTED);
+        } else {
+            float perTile = viewScale;
+            float cx = (mapPort.left + mapPort.right) / 2;
+            float cy = (mapPort.top + mapPort.bottom) / 2;
+            float x = cx + (mapLeft - viewCx) * perTile;
+            float y = cy + (mapTop - viewCy) * perTile;
+            canvas.save();
+            canvas.clipRect(mapPort);
+            srcRect.set(0, 0, mapBitmap.getWidth(), mapBitmap.getHeight());
+            dstRect.set(x, y, x + mapBitmap.getWidth() * mapBlock, y + mapBitmap.getHeight() * mapBlock);
+            canvas.drawBitmap(mapBitmap, srcRect, dstRect, pixels);
+            float markerX = cx + (playerX - viewCx) * perTile;
+            float markerY = cy + (playerY - viewCy) * perTile;
+            float pulse = 0.5f + 0.5f * (float) Math.sin(SystemClock.uptimeMillis() / 220.0);
+            fill.setColor(0xff000000);
+            canvas.drawCircle(markerX, markerY, (13 + 4 * pulse) * s, fill);
+            fill.setColor(GOLD);
+            canvas.drawCircle(markerX, markerY, (8 + 3 * pulse) * s, fill);
+            JSONArray npcs = latest == null ? null : latest.optJSONArray("npcs");
+            for (int index = 0; npcs != null && index < npcs.length(); index++) {
+                JSONArray npc = npcs.optJSONArray(index);
+                if (npc == null || npc.optInt(2) < 0) continue;
+                float nx = cx + (npc.optInt(0) - viewCx) * perTile;
+                float ny = cy + (npc.optInt(1) - viewCy) * perTile;
+                if (!mapPort.contains(nx, ny)) continue;
+                boolean boss = npc.optInt(4) == 1;
+                Bitmap head = sprites.get((boss ? "bosshead:" : "npchead:") + npc.optInt(2));
+                float hs = (boss ? 40 : 28) * s;
+                if (head != null) {
+                    float fit = Math.min(hs / head.getWidth(), hs / head.getHeight());
+                    float hw = head.getWidth() * fit;
+                    float hh = head.getHeight() * fit;
+                    drawSprite(canvas, head, nx - hw / 2, ny - hh / 2, hw, hh);
+                } else {
+                    fill.setColor(boss ? 0xffe0414a : 0xff5ae08a);
+                    canvas.drawCircle(nx, ny, hs * 0.3f, fill);
+                }
+                if (boss && npc.optInt(6) > 0) {
+                    float ratio = Math.max(0f, Math.min(1f, npc.optInt(5) / (float) npc.optInt(6)));
+                    float bw = 56 * s;
+                    fill.setColor(0xcc200808);
+                    canvas.drawRect(nx - bw / 2, ny + hs / 2 + 3 * s, nx + bw / 2, ny + hs / 2 + 11 * s, fill);
+                    fill.setColor(0xffe0414a);
+                    canvas.drawRect(nx - bw / 2, ny + hs / 2 + 3 * s, nx - bw / 2 + bw * ratio, ny + hs / 2 + 11 * s, fill);
+                }
+                if (boss || viewScale > 2.2f) {
+                    String label = npc.optString(3);
+                    drawText(canvas, label, nx - measure(label, 14 * s) / 2, ny - hs / 2 - 20 * s, 14 * s, boss ? 0xffffb0b0 : INK, true);
+                }
+            }
+            canvas.restore();
+        }
+        stroke.setColor(0xfff0c860);
+        stroke.setStrokeWidth(3 * s);
+        canvas.drawRect(mapPort, stroke);
+        fill.setColor(0xffd8a84a);
+        float r = 7 * s;
+        canvas.drawCircle(mapPort.left, mapPort.top, r, fill);
+        canvas.drawCircle(mapPort.right, mapPort.top, r, fill);
+        canvas.drawCircle(mapPort.left, mapPort.bottom, r, fill);
+        canvas.drawCircle(mapPort.right, mapPort.bottom, r, fill);
+        float bx = mapPort.right - 14 * s;
+        bx = button(canvas, "zin", "+", bx - 74 * s, mapPort.top + 14 * s, 74 * s, 64 * s, 0xdd2a3a6a, s);
+        bx = button(canvas, "zout", "-", bx - 74 * s, mapPort.top + 14 * s, 74 * s, 64 * s, 0xdd2a3a6a, s);
+        button(canvas, "center", Strings.get("to_player"), bx - 200 * s, mapPort.top + 14 * s, 200 * s, 64 * s, 0xdd2a3a6a, s);
+    }
+
+    // ---- status, hotbar, slots
+
+    private void drawStatus(Canvas canvas, int w, int h, float s) {
+        String message;
+        int color = MUTED;
+        if (feedbackActive()) {
+            message = feedback;
+            color = 0xffff9a8a;
+        } else if (latest == null) message = "";
+        else if (splitMode != 0) message = Strings.get("pick_empty");
+        else if (chosenGroup >= 0) {
+            JSONArray data = slotData(chosenGroup, chosenIndex);
+            message = (data == null ? "" : data.optString(4)) + "  ·  " + Strings.get("pick_target");
+        } else {
+            JSONArray inventory = latest.optJSONArray("inventory");
+            int selected = latest.optInt("hotbar", latest.optInt("selected", 0));
+            JSONArray data = inventory == null ? null : inventory.optJSONArray(selected);
+            String name = data == null || typeOf(data) == 0 ? "" : data.optString(4);
+            message = name + (pane <= 1 ? (name.isEmpty() ? "" : "  ·  ") + Strings.get("hint_drag") : "");
+        }
+        drawCenteredBox(canvas, message, w / 2f, h - 212 * s, 30 * s, color);
+        drawBuffs(canvas, w, h, s);
+    }
+
+    private boolean feedbackActive() {
+        return !feedback.isEmpty() && SystemClock.uptimeMillis() < feedbackUntil;
+    }
+
+    private void drawHotbar(Canvas canvas, int w, int h, float s, long now) {
+        float size = Math.min(112 * s, (w - 36 * s) / 10 - 8 * s);
+        float total = 10 * (size + 8 * s) - 8 * s;
+        float x0 = (w - total) / 2;
+        float y = h - 162 * s;
+        panel(canvas, x0 - 14 * s, y - 14 * s, x0 + total + 14 * s, y + size + 14 * s, 0xaa101a38, 0xff5a6ea8, s);
+        int selected = latest == null ? -1 : latest.optInt("hotbar", latest.optInt("selected", -1));
+        int overrideSlot = latest == null ? -1 : latest.optInt("selected", -1);
+        float targetX = selected < 0 ? -1 : x0 + selected * (size + 8 * s);
+        if (highlightX < 0 || targetX < 0) highlightX = targetX;
+        else highlightX += (targetX - highlightX) * 0.35f;
+        for (int index = 0; index < 10; index++) {
+            drawSlotAt(canvas, x0 + index * (size + 8 * s), y, size, 0, index, Integer.toString(index == 9 ? 0 : index + 1));
+        }
+        if (highlightX >= 0) {
+            float pulse = 0.5f + 0.5f * (float) Math.sin(now / 260.0);
+            stroke.setColor(GOLD);
+            stroke.setStrokeWidth(5 * s);
+            canvas.drawRect(highlightX - 4 * s, y - 4 * s, highlightX + size + 4 * s, y + size + 4 * s, stroke);
+            if (overrideSlot >= 0 && overrideSlot != selected && overrideSlot < 10) {
+                stroke.setColor(((int) (120 + 120 * pulse) << 24) | 0xffffff);
+                stroke.setStrokeWidth(3 * s);
+                float ox = x0 + overrideSlot * (size + 8 * s);
+                canvas.drawRect(ox - 2 * s, y - 2 * s, ox + size + 2 * s, y + size + 2 * s, stroke);
+            }
+        }
+    }
+
+    private String slotBack(int group, int index) {
+        if (group == 1) return index < 10 ? "ui:InventoryBack3" : "ui:InventoryBack8";
+        if (group == 2 || group == 4) return "ui:InventoryBack12";
+        if (group == 3 || group == 6) return "ui:InventoryBack7";
+        if (group == 5) {
+            JSONObject chest = latest == null ? null : latest.optJSONObject("chest");
+            return chest != null && chest.optInt("id") >= 0 ? "ui:InventoryBack5" : "ui:InventoryBack2";
+        }
+        return "ui:InventoryBack";
+    }
+
+    private void drawSlotAt(Canvas canvas, float x, float y, float size, int group, int index, String label) {
+        float s = size / 112f;
+        JSONArray data = slotData(group, index);
+        boolean locked = group == 1 && latest != null && latest.optJSONArray("unlocked") != null
+            && !latest.optJSONArray("unlocked").optBoolean(index % 10, true);
+        boolean favoured = data != null && typeOf(data) != 0 && data.optBoolean(3);
+        Bitmap back = sprites.get(favoured ? "ui:InventoryBack10" : slotBack(group, index));
+        if (back != null) drawSprite(canvas, back, x, y, size, size);
+        else panel(canvas, x, y, x + size, y + size, 0xcc243a73, 0xff6a80c0, s);
+        if (locked) {
+            fill.setColor(0xaa000000);
+            canvas.drawRect(x, y, x + size, y + size, fill);
+        }
+        boolean chosen = chosenGroup == group && chosenIndex == index;
+        boolean hovered = hover != null && hover.type == 0 && hover.group == group && hover.index == index;
+        boolean dragSource = dragging && downHit != null && downHit.type == 0 && downHit.group == group && downHit.index == index;
+        float shake = 0;
+        if (shakeGroup == group && shakeIndex == index) {
+            float age = (SystemClock.uptimeMillis() - shakeAt) / 450f;
+            if (age < 1f) shake = (float) Math.sin(age * 28) * (1f - age) * 9 * s;
+        }
+        canvas.save();
+        canvas.translate(shake, 0);
+        if (!dragSource) drawItem(canvas, data, x + size * 0.1f, y + size * 0.1f, size * 0.8f);
+        canvas.restore();
+        if (data != null && typeOf(data) == 0 && label != null) {
+            drawCentered(canvas, label, x + size / 2, y + size / 2, Math.max(14, 18 * s), 0x99b5c5d4);
+        } else if (label != null && group == 0 && index < 10) {
+            drawText(canvas, label, x + 6 * s, y + 4 * s, 20 * s, 0xaaffffff, true);
+        }
+        if (locked) drawCentered(canvas, Strings.get("locked"), x + size / 2, y + size / 2, 18 * s, 0xaab5c5d4);
+        if (chosen || hovered || (splitMode != 0 && typeOf(data) == 0 && group == 0)) {
+            float pulse = 0.5f + 0.5f * (float) Math.sin(SystemClock.uptimeMillis() / 180.0);
+            stroke.setColor(hovered ? 0xffffffff : 0xffff9a3c);
+            stroke.setStrokeWidth((4 + 2 * pulse) * s);
+            canvas.drawRect(x, y, x + size, y + size, stroke);
+        }
+        Hit hit = new Hit();
+        hit.type = 0;
+        hit.group = group;
+        hit.index = index;
+        hit.rect.set(x, y, x + size, y + size);
+        hits.add(hit);
+    }
+
+    private void drawItem(Canvas canvas, JSONArray data, float x, float y, float size) {
+        if (data == null || typeOf(data) == 0) return;
+        Bitmap icon = sprites.get("item:" + data.optInt(0));
+        float s = size / 90f;
+        if (icon != null) {
+            // like the game: one UI unit per sprite pixel, big sprites shrunk to fit a 32-pixel box
+            float unit = size / 41.6f;
+            float fit = Math.min(1f, 32f / Math.max(icon.getWidth(), icon.getHeight()));
+            float width = icon.getWidth() * fit * unit;
+            float height = icon.getHeight() * fit * unit;
+            drawSprite(canvas, icon, x + (size - width) / 2, y + (size - height) / 2, width, height);
+        } else {
+            String name = data.optString(4, "?");
+            drawCentered(canvas, name.isEmpty() ? "?" : name.substring(0, 1), x + size / 2, y + size / 2, 36 * s, GOLD);
+        }
+        if (data.optInt(1) > 1) {
+            String count = Integer.toString(data.optInt(1));
+            drawText(canvas, count, x + size - measure(count, 22 * s) - 2 * s, y + size - 24 * s, 22 * s, INK, true);
+        }
+        if (data.optBoolean(3)) drawStar(canvas, x + 4 * s, y + 4 * s, 18 * s);
+    }
+
+    private void drawStar(Canvas canvas, float x, float y, float size) {
+        star.reset();
+        float cx = x + size / 2;
+        float cy = y + size / 2;
+        for (int point = 0; point < 10; point++) {
+            double angle = -Math.PI / 2 + point * Math.PI / 5;
+            float radius = point % 2 == 0 ? size / 2 : size / 4.2f;
+            float px = cx + (float) Math.cos(angle) * radius;
+            float py = cy + (float) Math.sin(angle) * radius;
+            if (point == 0) star.moveTo(px, py);
+            else star.lineTo(px, py);
+        }
+        star.close();
+        fill.setColor(0xff000000);
+        canvas.save();
+        canvas.scale(1.25f, 1.25f, cx, cy);
+        canvas.drawPath(star, fill);
+        canvas.restore();
+        fill.setColor(GOLD);
+        canvas.drawPath(star, fill);
+    }
+
+    /** Pulling an item to the top edge lights a red gradient (drop); to the bottom edge a green one (use / equip). */
+    private void drawEdges(Canvas canvas, int w, int h, float s) {
+        if (!dragging || edgeZone == 0 || edgeStrength <= 0.02f) return;
+        if (edgeZone == 4) {
+            int c = 0xffffc83c;
+            int a = (int) (Math.min(1f, edgeStrength * 1.15f) * 230);
+            float d = 300 * s;
+            fill.setShader(new android.graphics.LinearGradient(0, 0, d, 0, (a << 24) | (c & 0xffffff), c & 0xffffff,
+                android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRect(0, 0, d, h, fill);
+            fill.setShader(null);
+            canvas.save();
+            canvas.rotate(-90, 56 * s, h / 2f);
+            drawCentered(canvas, Strings.get("zone_fav"), 56 * s, h / 2f, (30 + 8 * edgeStrength) * s, 0xffffffff);
+            canvas.restore();
+            return;
+        }
+        if (edgeZone == 3) {
+            int c = 0xff9a6bff;
+            int a = (int) (Math.min(1f, edgeStrength * 1.15f) * 230);
+            float d = 300 * s;
+            fill.setShader(new android.graphics.LinearGradient(w, 0, w - d, 0, (a << 24) | (c & 0xffffff), c & 0xffffff,
+                android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRect(w - d, 0, w, h, fill);
+            fill.setShader(null);
+            canvas.save();
+            canvas.rotate(90, w - 56 * s, h / 2f);
+            drawCentered(canvas, Strings.get("zone_trash"), w - 56 * s, h / 2f, (30 + 8 * edgeStrength) * s, 0xffffffff);
+            canvas.restore();
+            return;
+        }
+        boolean top = edgeZone == 1;
+        int color = top ? 0xffe0414a : 0xff43c970;
+        float depth = 440 * s;
+        int alpha = (int) (Math.min(1f, edgeStrength * 1.15f) * 230);
+        android.graphics.LinearGradient gradient = top
+            ? new android.graphics.LinearGradient(0, 0, 0, depth, (alpha << 24) | (color & 0xffffff), color & 0xffffff,
+                android.graphics.Shader.TileMode.CLAMP)
+            : new android.graphics.LinearGradient(0, h, 0, h - depth, (alpha << 24) | (color & 0xffffff), color & 0xffffff,
+                android.graphics.Shader.TileMode.CLAMP);
+        fill.setShader(gradient);
+        canvas.drawRect(0, top ? 0 : h - depth, w, top ? depth : h, fill);
+        fill.setShader(null);
+        String label = Strings.get(top ? "zone_drop" : "zone_use");
+        float size = (30 + 8 * edgeStrength) * s;
+        int textColor = edgeStrength > 0.22f ? 0xffffffff : 0xccffffff;
+        drawCentered(canvas, label, w / 2f, top ? 70 * s : h - 70 * s, size, textColor);
+        if (edgeStrength > 0.22f) {
+            stroke.setColor(textColor);
+            stroke.setStrokeWidth(4 * s);
+            canvas.drawLine(w * 0.3f, top ? 118 * s : h - 118 * s, w * 0.7f, top ? 118 * s : h - 118 * s, stroke);
+        }
+    }
+
+    private void drawDrag(Canvas canvas, float s) {
+        if (!dragging || downHit == null) return;
+        JSONArray data = slotData(downHit.group, downHit.index);
+        float size = 130 * s;
+        canvas.save();
+        canvas.translate(dragX - size / 2, dragY - size / 2 - 40 * s);
+        canvas.scale(1.1f, 1.1f, size / 2, size / 2);
+        fill.setColor(0x66000000);
+        canvas.drawCircle(size / 2, size / 2 + 6 * s, size * 0.42f, fill);
+        drawItem(canvas, data, 0, 0, size);
+        canvas.restore();
+    }
+
+    // ---- item sheet: description and actions
+
+    private static String coins(int value) {
+        if (value <= 0) return "—";
+        StringBuilder out = new StringBuilder();
+        int platinum = value / 1000000;
+        int gold = value / 10000 % 100;
+        int silver = value / 100 % 100;
+        int copper = value % 100;
+        if (platinum > 0) out.append(platinum).append("p ");
+        if (gold > 0) out.append(gold).append("g ");
+        if (silver > 0) out.append(silver).append("s ");
+        if (copper > 0) out.append(copper).append("c");
+        return out.toString().trim();
+    }
+
+    private void drawSheet(Canvas canvas, int w, int h, float s) {
+        hits.clear();   // everything below the sheet stops reacting to touches
+        fill.setColor(0xbb02060f);
+        canvas.drawRect(0, 0, w, h, fill);
+        Hit outside = new Hit();
+        outside.type = 9;
+        outside.rect.set(0, 0, w, h);
+        hits.add(outside);
+        JSONArray data = slotData(sheetGroup, sheetIndex);
+        if (typeOf(data) == 0) {
+            sheetOpen = false;
+            return;
+        }
+        float left = 28 * s;
+        float right = w - 28 * s;
+        float big = 190 * s;
+        // ---- what the window shows
+        boolean inventory = sheetGroup == 0;
+        boolean chestOpen = latest != null && latest.optJSONObject("chest") != null;
+        boolean favorited = data.optBoolean(3);
+        boolean wear = sheetInfo != null && (sheetInfo.optBoolean("accessory") || sheetInfo.optBoolean("vanity") || sheetInfo.optInt("defense") > 0);
+        boolean usable = sheetInfo != null && (sheetInfo.optBoolean("consumable") || sheetInfo.optInt("healLife") > 0
+            || sheetInfo.optInt("healMana") > 0);
+        ArrayList<String[]> actions = new ArrayList<>();
+        if (sheetGroup == 5) actions.add(new String[]{"take", Strings.get("take")});
+        if (inventory && chestOpen && sheetIndex < 50) actions.add(new String[]{"deposit", Strings.get("deposit")});
+        if (inventory && wear) actions.add(new String[]{"equip", Strings.get("equip")});
+        if (inventory && usable) actions.add(new String[]{"use", Strings.get("use")});
+        actions.add(new String[]{"favorite", Strings.get(favorited ? "unfavorite" : "favorite")});
+        if (inventory && data.optInt(1) >= 2) {
+            actions.add(new String[]{"split1", Strings.get("split_one")});
+            actions.add(new String[]{"split2", Strings.get("split_half")});
+        }
+        if (inventory && sheetIndex < 50) actions.add(new String[]{"drop", Strings.get("drop")});
+        actions.add(new String[]{"trash", trashArmed() ? Strings.get("trash_confirm") : Strings.get("trash")});
+        ArrayList<String> text = new ArrayList<>();
+        if (sheetInfo != null) {
+            ArrayList<String> lines = new ArrayList<>();
+            int damage = sheetInfo.optInt("damage");
+            JSONArray kinds = sheetInfo.optJSONArray("kinds");
+            if (damage > 0) {
+                String kind = kinds != null && kinds.length() > 0 ? " (" + Strings.get(kinds.optString(0)) + ")" : "";
+                lines.add(damage + " " + Strings.get("damage") + kind);
+            }
+            if (sheetInfo.optInt("crit") > 0 && damage > 0) lines.add(sheetInfo.optInt("crit") + "% " + Strings.get("crit"));
+            if (sheetInfo.optInt("useTime") > 0 && damage > 0) lines.add(Strings.get("speed") + ": " + sheetInfo.optInt("useTime"));
+            if (sheetInfo.optInt("defense") > 0) lines.add(sheetInfo.optInt("defense") + " " + Strings.get("defense"));
+            if (sheetInfo.optInt("pick") > 0) lines.add(sheetInfo.optInt("pick") + "% " + Strings.get("pick_power"));
+            if (sheetInfo.optInt("axe") > 0) lines.add(sheetInfo.optInt("axe") * 5 + "% " + Strings.get("axe_power"));
+            if (sheetInfo.optInt("hammer") > 0) lines.add(sheetInfo.optInt("hammer") + "% " + Strings.get("hammer_power"));
+            if (sheetInfo.optInt("healLife") > 0) lines.add(Strings.get("heals") + " " + sheetInfo.optInt("healLife"));
+            if (sheetInfo.optInt("healMana") > 0) lines.add(Strings.get("restores_mana") + " " + sheetInfo.optInt("healMana"));
+            if (sheetInfo.optInt("mana") > 0 && damage > 0) lines.add(Strings.get("uses_mana") + " " + sheetInfo.optInt("mana"));
+            JSONArray tooltip = sheetInfo.optJSONArray("tooltip");
+            for (int index = 0; tooltip != null && index < tooltip.length(); index++) lines.add(tooltip.optString(index));
+            for (String line : lines) text.addAll(wrap(line, right - left - 80 * s, 32 * s));
+        }
+        ArrayList<String> modLines = new ArrayList<>();
+        ArrayList<Integer> modColors = new ArrayList<>();
+        JSONArray mods = sheetInfo == null ? null : sheetInfo.optJSONArray("mods");
+        for (int index = 0; mods != null && index < mods.length(); index++) {
+            JSONArray mod = mods.optJSONArray(index);
+            if (mod == null) continue;
+            int value = mod.optInt(1);
+            String kind = mod.optString(0);
+            // less mana is good, everything else: more is good
+            boolean good = kind.equals("mana") ? value < 0 : value > 0;
+            modLines.add((value > 0 ? "+" : "") + value + "% " + Strings.get("mod_" + kind));
+            modColors.add(good ? 0xff7be07b : 0xffe06b6b);
+        }
+        float lineStep = 46 * s;
+        float gap = 12 * s;
+        float bw = (right - left - 68 * s - 2 * gap) / 3;
+        float bh = 84 * s;
+        int rows = (actions.size() + 2) / 3;
+        float buttonsHeight = rows * bh + (rows - 1) * gap;
+        float bodyHeight = Math.max(text.isEmpty() && modLines.isEmpty() ? lineStep : 0, (text.size() + modLines.size()) * lineStep);
+        float total = 34 * s + big + 26 * s + bodyHeight + 22 * s + buttonsHeight + 34 * s;
+        float maxTotal = h - 80 * s;
+        if (total > maxTotal) {
+            int fit = (int) ((maxTotal - (total - bodyHeight)) / lineStep);
+            while (text.size() > Math.max(1, fit)) text.remove(text.size() - 1);
+            total = maxTotal;
+        }
+        float panelTop = Math.max(30 * s, (h - total) / 2f);
+        float panelBottom = panelTop + total;
+        panel(canvas, left, panelTop, right, panelBottom, 0xf0101a38, 0xff8ea2d8, s);
+        Hit body = new Hit();
+        body.type = 8;
+        body.rect.set(left, panelTop, right, panelBottom);
+        hits.add(body);
+        // ---- header: sprite, name, stack, value
+        float bx0 = left + 34 * s;
+        float by0 = panelTop + 34 * s;
+        Bitmap back = sprites.get(slotBack(sheetGroup, sheetIndex));
+        if (back != null) drawSprite(canvas, back, bx0, by0, big, big);
+        else panel(canvas, bx0, by0, bx0 + big, by0 + big, 0xcc243a73, 0xff6a80c0, s);
+        drawItem(canvas, data, bx0 + big * 0.1f, by0 + big * 0.1f, big * 0.8f);
+        int rare = sheetInfo == null ? 0 : sheetInfo.optInt("rare");
+        int color = RARITY[Math.max(0, Math.min(RARITY.length - 1, rare + 1))];
+        String name = sheetInfo == null ? data.optString(4) : sheetInfo.optString("name", data.optString(4));
+        float tx = bx0 + big + 30 * s;
+        float y = by0 - 2 * s;
+        for (String part : wrap(name, right - tx - 100 * s, 46 * s)) {
+            drawText(canvas, part, tx, y, 46 * s, color, true);
+            y += 56 * s;
+        }
+        if (data.optInt(1) > 1) {
+            drawText(canvas, Strings.get("stack_of") + ": " + data.optInt(1), tx, y, 30 * s, MUTED, true);
+            y += 42 * s;
+        }
+        if (sheetInfo != null) {
+            drawText(canvas, Strings.get("value") + ": " + coins(sheetInfo.optInt("value") * Math.max(1, data.optInt(1))), tx, y, 30 * s, GOLD, true);
+        }
+        // ---- description
+        float ty = by0 + big + 26 * s;
+        if (sheetInfo == null) drawText(canvas, "…", left + 40 * s, ty, 34 * s, MUTED, true);
+        for (String part : text) {
+            drawText(canvas, part, left + 40 * s, ty, 32 * s, INK, true);
+            ty += lineStep;
+        }
+        for (int index = 0; index < modLines.size(); index++) {
+            drawText(canvas, modLines.get(index), left + 40 * s, ty, 32 * s, modColors.get(index), true);
+            ty += lineStep;
+        }
+        // ---- buttons
+        float buttonsTop = panelBottom - 34 * s - buttonsHeight;
+        for (int index = 0; index < actions.size(); index++) {
+            float bx = left + 34 * s + (index % 3) * (bw + gap);
+            float by = buttonsTop + (index / 3) * (bh + gap);
+            String kind = actions.get(index)[0];
+            int tint = kind.equals("trash") ? 0xff7a2a2f : kind.equals("take") || kind.equals("deposit") ? 0xff2c6a3c : 0xff2a3a6a;
+            panel(canvas, bx, by, bx + bw, by + bh, tint, 0xff8ea2d8, s);
+            drawCentered(canvas, actions.get(index)[1], bx + bw / 2, by + bh / 2, 34 * s, INK);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "sheet_" + kind;
+            hit.rect.set(bx, by, bx + bw, by + bh);
+            hits.add(hit);
+        }
+        Hit close = new Hit();
+        close.type = 2;
+        close.name = "sheet_close";
+        close.rect.set(right - 94 * s, panelTop + 16 * s, right - 18 * s, panelTop + 92 * s);
+        panel(canvas, close.rect.left, close.rect.top, close.rect.right, close.rect.bottom, 0xff2a3a6a, 0xff8ea2d8, s);
+        drawCentered(canvas, "x", (close.rect.left + close.rect.right) / 2, (close.rect.top + close.rect.bottom) / 2, 42 * s, INK);
+        hits.add(close);
+    }
+
+    private boolean trashArmed() {
+        return trashArmedAt != 0 && SystemClock.uptimeMillis() - trashArmedAt < 2500;
+    }
+
+    private ArrayList<String> wrap(String value, float maxWidth, float size) {
+        ArrayList<String> lines = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String word : value.split(" ")) {
+            String candidate = current.length() == 0 ? word : current + " " + word;
+            if (current.length() > 0 && measure(candidate, size) > maxWidth) {
+                lines.add(current.toString());
+                current = new StringBuilder(word);
+            } else {
+                current = new StringBuilder(candidate);
+            }
+        }
+        if (current.length() > 0) lines.add(current.toString());
+        return lines;
+    }
+
+    // ---- NPC conversation (read-only until the shop/dialogue commands exist in the mod)
+
+    private void drawDialogue(Canvas canvas, int w, float s, float top, float bottom) {
+        float left = 40 * s;
+        float right = w - 40 * s;
+        float panelBottom = bottom - 6 * s;
+        float panelTop = top + 20 * s;
+        panel(canvas, left, panelTop, right, panelBottom, 0xee101a38, GOLD, s);
+        String name = npcInfo == null ? "" : npcInfo.optString("name");
+        String kind = npcInfo == null ? "" : npcInfo.optString("kind");
+        drawText(canvas, (name.isEmpty() ? Strings.get("talking") : name) + (kind.isEmpty() ? "" : "  -  " + kind),
+            left + 24 * s, panelTop + 18 * s, 34 * s, GOLD, true);
+        String chat = npcInfo == null ? "" : npcInfo.optString("text");
+        float y = panelTop + 70 * s;
+        for (String line : wrap(chat, right - left - 48 * s, 28 * s)) {
+            drawText(canvas, line, left + 24 * s, y, 28 * s, INK, true);
+            y += 46 * s;
+            if (y > panelBottom - 20 * s) break;
+        }
+    }
+
+    // ---- drawing helpers
+
+    /** Nine-slice: corners keep the game's pixel look, edges and centre stretch. */
+    private void drawPlate(Canvas canvas, Bitmap plate, float l, float t, float r, float b, float s, float alpha) {
+        int w = plate.getWidth();
+        int h = plate.getHeight();
+        int cs = Math.max(3, Math.min(w, h) * 28 / 100);
+        float cd = Math.min(cs * 1.9f * s * 1.15f, Math.min(r - l, b - t) / 2.3f);
+        l = Math.round(l);
+        t = Math.round(t);
+        r = Math.round(r);
+        b = Math.round(b);
+        cd = Math.round(cd);
+        // solid centre first, so no hairline gaps can show between slices
+        int centre = plate.getPixel(w / 2, h / 2);
+        fill.setColor((centre & 0x00ffffff) | ((int) (255 * alpha) << 24));
+        canvas.drawRect(l + cd - 1, t + cd - 1, r - cd + 1, b - cd + 1, fill);
+        int[] sx = {0, cs, w - cs, w};
+        int[] sy = {0, cs, h - cs, h};
+        float[] dx = {l, l + cd, r - cd, r};
+        float[] dy = {t, t + cd, b - cd, b};
+        pixels.setAlpha((int) (255 * alpha));
+        for (int j = 0; j < 3; j++) {
+            for (int i = 0; i < 3; i++) {
+                if (i == 1 && j == 1) continue;
+                plateSrc.set(sx[i], sy[j], sx[i + 1], sy[j + 1]);
+                plateDst.set(dx[i] - (i > 0 ? 0.5f : 0), dy[j] - (j > 0 ? 0.5f : 0), dx[i + 1] + (i < 2 ? 0.5f : 0), dy[j + 1] + (j < 2 ? 0.5f : 0));
+                canvas.drawBitmap(plate, plateSrc, plateDst, pixels);
+            }
+        }
+        pixels.setAlpha(255);
+    }
+
+    private void drawSprite(Canvas canvas, Bitmap bitmap, float x, float y, float width, float height) {
+        srcRect.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
+        dstRect.set(x, y, x + width, y + height);
+        canvas.drawBitmap(bitmap, srcRect, dstRect, pixels);
+    }
+
+    /** Plate colour variants of the game's slot sprite, chosen from the colour the caller asked for. */
+    private String plateFor(int color, int border) {
+        if (border == GOLD || border == 0xfff0c860 || border == 0xffd8a84a) return "ui:InventoryBack14";
+        int r = (color >> 16) & 255;
+        int g = (color >> 8) & 255;
+        int b = color & 255;
+        if (r > g + 30 && r > b + 10) return "ui:InventoryBack2";
+        if (g > r + 30 && g >= b) return "ui:InventoryBack3";
+        if (r < 44 && g < 52 && b < 70) return "ui:InventoryBack12";
+        return "ui:InventoryBack";
+    }
+
+    private final Rect plateSrc = new Rect();
+    private final RectF plateDst = new RectF();
+
+    private void panel(Canvas canvas, float l, float t, float r, float b, int color, int border, float s) {
+        Bitmap plate = sprites.get(plateFor(color, border));
+        if (plate != null && r - l > 20 && b - t > 20) {
+            drawPlate(canvas, plate, l, t, r, b, s, (color >>> 24) < 0xb0 ? 0.86f : 1f);
+            return;
+        }
+        fill.setColor(color);
+        canvas.drawRect(l, t, r, b, fill);
+        stroke.setColor(border);
+        stroke.setStrokeWidth(3 * s);
+        canvas.drawRect(l + 1.5f * s, t + 1.5f * s, r - 1.5f * s, b - 1.5f * s, stroke);
+        stroke.setColor(0xff000000);
+        stroke.setStrokeWidth(2 * s);
+        canvas.drawRect(l, t, r, b, stroke);
+    }
+
+    private float measure(String value, float size) {
+        size *= TEXT_BOOST;
+        if (font.ready()) return font.measure(value, size);
+        text.setTextSize(size);
+        return text.measureText(value);
+    }
+
+    private void drawText(Canvas canvas, String value, float x, float y, float size, int color, boolean outline) {
+        if (value == null || value.isEmpty()) return;
+        size *= TEXT_BOOST;
+        if (font.ready()) {
+            font.draw(canvas, value, x, y, size, color, outline);
+            return;
+        }
+        text.setTextSize(size);
+        text.setTextAlign(Paint.Align.LEFT);
+        if (outline) {
+            text.setColor(0xff000000);
+            canvas.drawText(value, x + 2, y + size * 0.85f + 2, text);
+        }
+        text.setColor(color);
+        canvas.drawText(value, x, y + size * 0.85f, text);
+    }
+
+    private void drawCentered(Canvas canvas, String value, float cx, float cy, float size, int color) {
+        if (value == null || value.isEmpty()) return;
+        drawText(canvas, value, cx - measure(value, size) / 2, cy - size * TEXT_BOOST * 0.5f, size, color, true);
+    }
+
+    private void drawCenteredBox(Canvas canvas, String value, float cx, float top, float size, int color) {
+        if (value == null || value.isEmpty()) return;
+        drawText(canvas, value, cx - measure(value, size) / 2, top, size, color, true);
+    }
+
+    // ------------------------------------------------------------------ touch
+
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        scaler.onTouchEvent(event);
+        if (scaler.isInProgress() || scaling && event.getPointerCount() > 1) return true;
+        float x = event.getX();
+        float y = event.getY();
+        float s = getHeight() / 1080f;
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                scaling = false;
+                downX = x;
+                downY = y;
+                lastY = y;
+                downAt = SystemClock.uptimeMillis();
+                downHit = hitAt(x, y);
+                dragging = false;
+                scrolling = false;
+                hover = null;
+                dragStartCx = viewCx;
+                dragStartCy = viewCy;
+                if (downHit != null && downHit.type == 4) startCraftHold(downHit);
+                return true;
+            case MotionEvent.ACTION_MOVE:
+                if (scaling) return true;
+                float distance = Math.max(Math.abs(x - downX), Math.abs(y - downY));
+                if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen) {
+                    if (distance > 8 * s || !follow) {
+                        float perTile = viewScale;
+                        follow = false;
+                        viewCx = dragStartCx - (x - downX) / perTile;
+                        viewCy = dragStartCy - (y - downY) / perTile;
+                        maybeRefreshMap(false);
+                    }
+                    return true;
+                }
+                if (downHit != null && downHit.type == 0 && !dragging && distance > 18 * s && !sheetOpen
+                    && typeOf(slotData(downHit.group, downHit.index)) != 0 && latest != null
+                    && (Math.abs(x - downX) >= Math.abs(y - downY) * 0.5f || neededHeight <= viewHeight + 8 * s
+                        || (downHit.group == 0 && downHit.index < 10))) {
+                    dragging = true;
+                    sound("grab");
+                    chosenGroup = -1;
+                }
+                if (dragging) {
+                    dragX = x;
+                    dragY = y;
+                    float zone = 340 * s;
+                    float fromTop = y;
+                    float fromBottom = getHeight() - y;
+                    float fromRight = getWidth() - x;
+                    float trashZone = 120 * s;
+                    boolean aboveHotbar = y < getHeight() - 200 * s;
+                    if (aboveHotbar && latest != null && latest.has("trash") && fromRight < trashZone && downHit != null && downHit.group != 6
+                        && (downHit.group == 0 || downHit.group == 5)) {
+                        edgeZone = 3;
+                        edgeStrength = 1 - fromRight / trashZone;
+                    } else if (aboveHotbar && x < trashZone && downHit != null && downHit.group != 6) {
+                        edgeZone = 4;
+                        edgeStrength = 1 - x / trashZone;
+                    } else if (fromTop < zone) {
+                        edgeZone = 1;
+                        edgeStrength = 1 - fromTop / zone;
+                    } else if (fromBottom < zone) {
+                        edgeZone = 2;
+                        edgeStrength = 1 - fromBottom / zone;
+                    } else {
+                        edgeZone = 0;
+                        edgeStrength = 0;
+                    }
+                    Hit under = hitAt(x, y - 40 * s);
+                    hover = under != null && under.type == 0 ? under : null;
+                    // a slot under the item wins over the edge zones, except right at the very edge
+                    if (hover != null && edgeStrength < 0.85f) {
+                        edgeZone = 0;
+                        edgeStrength = 0;
+                    }
+                } else if (!scrolling && distance > 18 * s && !sheetOpen && (downHit == null || downHit.type == 3 || downHit.type == 0)) {
+                    scrolling = true;
+                }
+                if (scrolling) {
+                    float delta = y - lastY;
+                    if (pane == 2) {
+                        if (downX < getWidth() * 0.45f) {
+                            listScroll = Math.max(0, Math.min(Math.max(0, neededHeight - viewHeight + 80 * s), listScroll - delta));
+                        }
+                    } else {
+                        scrollY = Math.max(0, Math.min(Math.max(0, neededHeight - viewHeight), scrollY - delta));
+                    }
+                }
+                lastY = y;
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                downX = x;
+                downY = y;
+                dragStartCx = viewCx;
+                dragStartCy = viewCy;
+                return true;
+            case MotionEvent.ACTION_UP:
+                stopCraftHold();
+                if (scaling) { scaling = false; return true; }
+                finishTouch(x, y);
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                stopCraftHold();
+                dragging = false;
+                edgeZone = 0;
+                edgeStrength = 0;
+                scrolling = false;
+                hover = null;
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void maybeRefreshMap(boolean force) {
+        if (mapBitmap == null) return;
+        float centerX = mapLeft + mapCols * mapStep / 2f;
+        float centerY = mapTop + mapRows * mapStep / 2f;
+        float limitX = mapCols * mapStep * 0.18f;
+        float limitY = mapRows * mapStep * 0.18f;
+        if (force || Math.abs(viewCx - centerX) > limitX || Math.abs(viewCy - centerY) > limitY) {
+            revision++;
+            refresh.run();
+        }
+    }
+
+    private void finishTouch(float x, float y) {
+        if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen) {
+            if (!follow) maybeRefreshMap(true);
+            return;
+        }
+        if (dragging) {
+            Hit target = hover;
+            dragging = false;
+            hover = null;
+            int zone = edgeZone;
+            float strength = edgeStrength;
+            edgeZone = 0;
+            edgeStrength = 0;
+            if (zone != 0 && strength > 0.22f && downHit != null) {
+                String edge = downHit.group == 5 ? "take" : zone == 1 ? "drop" : "use";
+                if (zone == 3) edge = "trashswap";
+                if (zone == 4) edge = "favorite";
+                act(edge, downHit.group, downHit.index, slotData(downHit.group, downHit.index));
+                return;
+            }
+            if (target != null && downHit != null && (target.group != downHit.group || target.index != downHit.index)) {
+                transfer(downHit.group, downHit.index, target.group, target.index);
+            }
+            return;
+        }
+        hover = null;
+        if (scrolling) { scrolling = false; return; }
+        Hit hit = downHit;
+        if (hit == null) return;
+        Hit now = hitAt(x, y);
+        if (now == null || now.type != hit.type || now.group != hit.group || now.index != hit.index) return;
+        boolean longPress = SystemClock.uptimeMillis() - downAt > 420;
+        switch (hit.type) {
+            case 1: openPane(hit.index); break;
+            case 2: pressButton(hit.name); break;
+            case 3: selectedRecipe = hit.index; break;
+            case 9: sheetOpen = false; splitMode = 0; sound("close"); break;
+            case 4: break;
+            case 8: break;
+            default: tapSlot(hit, longPress); break;
+        }
+    }
+
+    private Hit hitAt(float x, float y) {
+        for (int index = hits.size() - 1; index >= 0; index--) {
+            Hit hit = hits.get(index);
+            if (hit.rect.contains(x, y)) return hit;
+        }
+        return null;
+    }
+
+    private void pressButton(String name) {
+        if (!name.startsWith("sheet_") && !name.startsWith("chest_")) sound("tick");
+        if (name.startsWith("sheet_")) {
+            sheetAction(name.substring(6));
+            return;
+        }
+        if (name.startsWith("buff_")) {
+            JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
+            JSONArray buff = buffs == null ? null : buffs.optJSONArray(Integer.parseInt(name.substring(5)));
+            if (buff != null) {
+                int seconds = buff.optInt(1) / 60;
+                feedback = buff.optString(3) + (seconds > 0 ? "  " + (seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + (seconds % 60) : "");
+                feedbackUntil = SystemClock.uptimeMillis() + 2600;
+            }
+            return;
+        }
+        if (name.startsWith("chest_")) {
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "chest");
+            TlProPanel.put(command, "op", name.substring(6));
+            send.accept(command);
+            return;
+        }
+        switch (name) {
+            case "barflip":
+                heartsMode = !heartsMode;
+                flipAt = SystemClock.uptimeMillis();
+                break;
+            case "lang":
+                prefs.edit().putString("lang", Strings.russian ? "en" : "ru").apply();
+                Strings.russian = !Strings.russian;
+                break;
+            case "hud":
+                if (latest != null && latest.optBoolean("hudAvailable")) {
+                    hideRequested = !hideRequested;
+                    refresh.run();
+                }
+                break;
+            case "sort":
+                act("sort", 0, 0, null);
+                break;
+            case "zin": changeZoom(-1); break;
+            case "zout": changeZoom(1); break;
+            case "center": follow = true; revision++; refresh.run(); break;
+            case "prev": if (recipePage > 0) { recipePage--; revision++; refresh.run(); } break;
+            case "next": recipePage++; revision++; refresh.run(); break;
+            default: break;
+        }
+    }
+
+    private long lastTapAt;
+    private int lastTapGroup = -1, lastTapIndex = -1;
+    private long shakeAt;
+    private int shakeGroup = -1, shakeIndex = -1;
+    private int pendingGroup = -1, pendingIndex;
+    private final Runnable openPendingSheet = () -> {
+        if (pendingGroup >= 0) openSheet(pendingGroup, pendingIndex);
+        pendingGroup = -1;
+    };
+
+    private int freeSlotFor(int sourceIndex) {
+        JSONArray inventory = latest == null ? null : latest.optJSONArray("inventory");
+        if (inventory == null) return -1;
+        for (int index = 10; index < Math.min(50, inventory.length()); index++) {
+            if (index != sourceIndex && typeOf(inventory.optJSONArray(index)) == 0) return index;
+        }
+        for (int index = 0; index < Math.min(10, inventory.length()); index++) {
+            if (index != sourceIndex && typeOf(inventory.optJSONArray(index)) == 0) return index;
+        }
+        return -1;
+    }
+
+    /** Double tap on a stack: put half of it into the first free slot; with no room the stack just shakes. */
+    private void splitInHalf(int group, int index) {
+        int free = freeSlotFor(index);
+        if (free < 0) {
+            shakeGroup = group;
+            shakeIndex = index;
+            shakeAt = SystemClock.uptimeMillis();
+            feedback = Strings.get("no_room");
+            feedbackUntil = shakeAt + 2000;
+            return;
+        }
+        JSONObject command = op("act");
+        TlProPanel.put(command, "kind", "split");
+        TlProPanel.put(command, "amount", "half");
+        TlProPanel.put(command, "from", new JSONArray().put(group).put(index));
+        TlProPanel.put(command, "expectFrom", expected(slotData(group, index)));
+        TlProPanel.put(command, "to", new JSONArray().put(0).put(free));
+        TlProPanel.put(command, "expectTo", expected(slotData(0, free)));
+        send.accept(command);
+    }
+
+    private void tapSlot(Hit hit, boolean longPress) {
+        if (latest == null) return;
+        long tapTime = SystemClock.uptimeMillis();
+        JSONArray tapped = slotData(hit.group, hit.index);
+        if (splitMode == 0 && hit.group == 0 && lastTapGroup == 0 && lastTapIndex == hit.index && tapTime - lastTapAt < 340
+            && typeOf(tapped) != 0 && tapped.optInt(1) >= 2) {
+            handler.removeCallbacks(openPendingSheet);
+            pendingGroup = -1;
+            lastTapAt = 0;
+            lastTapGroup = -1;
+            chosenGroup = -1;
+            splitInHalf(hit.group, hit.index);
+            return;
+        }
+        lastTapAt = tapTime;
+        lastTapGroup = hit.group;
+        lastTapIndex = hit.index;
+        if (splitMode != 0) {
+            JSONArray data = slotData(hit.group, hit.index);
+            if (hit.group == 0 && typeOf(data) == 0) {
+                JSONObject command = op("act");
+                TlProPanel.put(command, "kind", "split");
+                TlProPanel.put(command, "amount", splitMode == 2 ? "half" : "one");
+                TlProPanel.put(command, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
+                TlProPanel.put(command, "expectFrom", expected(slotData(sheetGroup, sheetIndex)));
+                TlProPanel.put(command, "to", new JSONArray().put(hit.group).put(hit.index));
+                TlProPanel.put(command, "expectTo", expected(data));
+                send.accept(command);
+            }
+            splitMode = 0;
+            return;
+        }
+        if (hit.group == 6) {
+            if (chosenGroup >= 0) {
+                transfer(chosenGroup, chosenIndex, 6, 0);
+                chosenGroup = -1;
+            } else if (typeOf(slotData(6, 0)) != 0) {
+                chosenGroup = 6;
+                chosenIndex = 0;
+            }
+            return;
+        }
+        boolean same = chosenGroup == hit.group && chosenIndex == hit.index;
+        if (same) {
+            chosenGroup = -1;
+            return;
+        }
+        JSONArray data = slotData(hit.group, hit.index);
+        if (chosenGroup >= 0) {
+            transfer(chosenGroup, chosenIndex, hit.group, hit.index);
+            chosenGroup = -1;
+            return;
+        }
+        boolean hotbar = hit.group == 0 && hit.index < 10;
+        if (hotbar && !longPress) {
+            JSONObject action = op("select");
+            TlProPanel.put(action, "slot", hit.index);
+            send.accept(action);
+        } else if (typeOf(data) != 0) {
+            if (hit.group == 0 && data.optInt(1) >= 2) {
+                pendingGroup = hit.group;
+                pendingIndex = hit.index;
+                handler.removeCallbacks(openPendingSheet);
+                handler.postDelayed(openPendingSheet, 300);
+            } else {
+                openSheet(hit.group, hit.index);
+            }
+        }
+    }
+
+    private void sheetAction(String name) {
+        switch (name) {
+            case "close":
+                sheetOpen = false;
+                sound("close");
+                splitMode = 0;
+                break;
+            case "split1":
+                splitMode = 1;
+                sheetOpen = false;
+                break;
+            case "split2":
+                splitMode = 2;
+                sheetOpen = false;
+                break;
+            case "trash":
+                if (trashArmed()) {
+                    act("trash", sheetGroup, sheetIndex, slotData(sheetGroup, sheetIndex));
+                    sheetOpen = false;
+                } else {
+                    trashArmedAt = SystemClock.uptimeMillis();
+                }
+                break;
+            case "drop":
+                JSONObject hotbar = op("select");
+                TlProPanel.put(hotbar, "slot", sheetIndex);
+                if (latest != null && latest.optInt("hotbar") != sheetIndex) send.accept(hotbar);
+                final int group = sheetGroup;
+                final int index = sheetIndex;
+                handler.postDelayed(() -> act("drop", group, index, slotData(group, index)), 450);
+                sheetOpen = false;
+                break;
+            default:
+                act(name, sheetGroup, sheetIndex, slotData(sheetGroup, sheetIndex));
+                sheetOpen = false;
+                break;
+        }
+    }
+
+    private void act(String kind, int group, int index, JSONArray data) {
+        JSONObject command = op("act");
+        TlProPanel.put(command, "kind", kind);
+        if (data != null) {
+            TlProPanel.put(command, "from", new JSONArray().put(group).put(index));
+            TlProPanel.put(command, "expectFrom", expected(data));
+        }
+        send.accept(command);
+    }
+
+    private static JSONArray expected(JSONArray data) {
+        return new JSONArray().put(typeOf(data)).put(data == null ? 0 : data.optInt(1)).put(data == null ? 0 : data.optInt(2))
+            .put(data != null && data.optBoolean(3));
+    }
+
+    private void transfer(int fromGroup, int fromIndex, int toGroup, int toIndex) {
+        if (fromGroup == 6 && toGroup == 6) return;
+        if (toGroup == 6 || fromGroup == 6) {
+            int group = toGroup == 6 ? fromGroup : toGroup;
+            int index = toGroup == 6 ? fromIndex : toIndex;
+            if (group != 0 && group != 5) return;
+            act("trashswap", group, index, slotData(group, index));
+            return;
+        }
+        JSONObject command = op("transfer");
+        TlProPanel.put(command, "from", new JSONArray().put(fromGroup).put(fromIndex));
+        TlProPanel.put(command, "expectFrom", expected(slotData(fromGroup, fromIndex)));
+        TlProPanel.put(command, "to", new JSONArray().put(toGroup).put(toIndex));
+        TlProPanel.put(command, "expectTo", expected(slotData(toGroup, toIndex)));
+        send.accept(command);
+    }
+
+    // ---- crafting: tap crafts once; holding repeats like the game
+
+    private void startCraftHold(Hit hit) {
+        craftHeld = true;
+        doCraft(hit.index);
+        handler.removeCallbacks(craftRepeat);
+        handler.postDelayed(craftRepeat, 520);
+    }
+
+    private void stopCraftHold() {
+        craftHeld = false;
+        handler.removeCallbacks(craftRepeat);
+    }
+
+    private void repeatCraft() {
+        if (!craftHeld) return;
+        doCraft(selectedRecipe);
+        handler.postDelayed(craftRepeat, 240);
+    }
+
+    private void doCraft(int id) {
+        JSONObject list = latest == null ? null : latest.optJSONObject("recipes");
+        JSONArray entries = list == null ? null : list.optJSONArray("entries");
+        JSONArray entry = findRecipe(entries, id);
+        if (entry == null) return;
+        JSONObject command = op("craft");
+        TlProPanel.put(command, "id", id);
+        TlProPanel.put(command, "expect", expected(entry.optJSONArray(1)));
+        send.accept(command);
+    }
+}

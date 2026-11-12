@@ -1,0 +1,100 @@
+TERRADUO COMPANION  -  USER GUIDE (English)
+==========================================
+
+1. BEFORE YOU START
+   * Device: dual-screen Android (AYN Thor). Terraria runs on the top screen (display 0), the
+     companion on the bottom screen (display 4).
+   * Terraria bought on Google Play, and TL Pro installed. Use only legal copies; this project
+     never touches or re-signs the game APK.
+   * PC with Python 3.10+, adb (Android platform-tools) and USB debugging enabled on the device
+     (needed once for step 4).
+   * Back up your saves first (Android/data/com.and.games505.TerrariaPaid/files/).
+
+2. INSTALL THE APP
+   a) Copy Terraduo-Companion-1.0.apk to the device and install it (allow "install unknown apps"
+      for your file manager) - or from the PC:   adb install -r Terraduo-Companion-1.0.apk
+   b) The app is called "Terraduo Companion" and has the icon from icon.png.
+
+3. INSTALL THE MOD IN TL PRO
+   a) Copy Terraduo-Companion-mod-v5.tl to the device.
+   b) In TL Pro open the pack/mod manager, import the .tl file and enable the pack
+      "Terraduo Companion" for your single-player profile.
+   c) Every time the mod changes, restart the game through TL Pro: mods are loaded once per start.
+
+4. PREPARE THE SPRITES (once, on the PC, from YOUR copy of the game)
+   The app does not contain any game art. Two scripts decode it from the game you installed and
+   copy the result into the app's private folder.
+   a) pip install -r tools/requirements.txt
+   b) With the device connected and USB debugging on:
+          python tools/extract_assets.py --push
+      This pulls the installed game APK, decodes interface, items, buffs, map icons, fonts and
+      pushes them to /sdcard/Android/data/com.terraduo.companion/files/atlas/.
+   c) Start Terraria through TL Pro, enter a single-player world, then:
+          adb forward tcp:38656 tcp:38656
+          python tools/extract_backgrounds.py --push
+      This reads the background tile tables from the running game and builds the biome backdrops
+      (a few minutes the first time).
+   Without this step the app still works but draws plain frames instead of sprites.
+
+5. EVERYDAY USE
+   1. Open Terraria from TL Pro and load a single-player world.
+   2. Tap the "Terraduo Companion" icon. It opens by itself on the bottom screen.
+      (If it opens on the top screen on a device without a second display it simply stays there.)
+   3. The message "Open a single-player world through TL Pro" means the game is not in a world yet.
+
+6. THE SCREEN
+   Top bar:   life and mana (tap to flip between bars and hearts / stars), day/night and area,
+              readings of watch / depth meter / compass / weather radio, HIDE HUD, language (RU/EN).
+   Tabs:      Inventory | Equipment | Craft | Map.
+   Bottom:    buffs and debuffs (tap one for its name and time), status line, hotbar (10 slots).
+
+7. GESTURES AND BUTTONS
+   Inventory
+     * Tap a hotbar slot: select it in the game.
+     * Tap any item: open the item window (see 8). Tap a slot, then another slot: move it there.
+     * Drag an item onto another slot: move / swap / stack with the same item.
+     * Double-tap a stack: split half into the first free slot (the stack shakes if there is none).
+     * Trash slot (right of the ammo row): drop an item on it, or tap the item and then the slot.
+       It swaps with what is already in the trash, so the last item is recoverable.
+     * Sort: the game's own inventory sort.
+   While dragging, push the item to a screen edge until it glows:
+     * TOP edge   - drop the item into the world.
+     * BOTTOM edge - use it: drink a potion, equip armour / accessory, summon a boss with its item.
+     * RIGHT edge - throw it in the trash slot.        * LEFT edge - toggle Favourite.
+   Equipment: drag between slots just like the inventory. Locked slots are dimmed.
+   Craft: left list = what you can craft now; tap an item to see ingredients and the crafting
+          station; press (and hold) "Craft" to craft (hold repeats).
+   Map: drag to pan, pinch or use + / - to zoom, "To player" re-centres. Town NPC heads are shown.
+   Chests: when you open a chest or a bank in the game, the Inventory tab shows it automatically.
+          Loot all | Deposit all | Quick stack | Restock | Sort | Close.
+          Tap an item in the chest and press "Take", or drag it to a slot.
+
+8. ITEM WINDOW
+   Sprite, name in rarity colour, stack, value, stats and the game's tooltip. Reforge changes are
+   listed as +x% / -x% (green good, red bad). Buttons that make sense for the item are shown:
+   Take (from a chest) | Put in chest | Equip | Use | Favourite | Split 1 | Split half | Drop | Delete.
+   "Delete" needs a second press within two seconds. Favourited items cannot be deleted.
+
+9. HIDE HUD AND THE CONTROLLER
+   Press HIDE HUD to remove the game's own HUD from the top screen. While it is hidden:
+     * L1 / R1 change the hotbar slot (the companion rescues the bumpers if the game does not).
+     * Y switches the companion's tabs in a loop and the game does not open its own inventory.
+   Press SHOW HUD to bring the game HUD back.
+
+10. TROUBLESHOOTING
+   * "Open a single-player world through TL Pro": load a world, check the mod is enabled, restart
+     the game from TL Pro after updating the mod, then reopen the companion.
+   * Empty slots without pictures: repeat step 4 (the sprites are missing or outdated).
+   * Background is a generated sky: run extract_backgrounds.py (step 4c) with the game in a world.
+   * Game crashes when you enter a world: disable the mod pack, enter the world, and report the log.
+   * Second screen goes black: the app keeps it awake; wake it with the power button if needed.
+   * The app disappears when you switch games: reopen it from the launcher icon.
+
+11. UNINSTALL
+   Uninstall the app like any other, delete the "Terraduo Companion" pack in TL Pro. Saves and the
+   game are untouched.
+
+12. BUILD FROM SOURCE
+   Source code is in the full archive (source/). tools/build.py builds and signs the APK with a
+   development key (needs JDK, Android SDK build-tools, platform android-33); tools/build_tlpro.py
+   packs the mod; tools/make_icon.py redraws the icon.

@@ -1,0 +1,32 @@
+# build output
+build/
+dist/
+*.apk
+*.zip
+*.tl
+*.keystore
+*.jks
+
+# the game and anything decoded from it must never be committed
+play/
+alt/
+assets-cache/
+backups/
+dump/
+dump.cs
+il2cpp.h
+global-metadata.dat
+libil2cpp.so
+atlas/
+sprites*/
+
+# local tooling
+tools/android-sdk/
+tools/platform-tools/
+tools/_dl/
+tools/Il2CppDumper/
+tools/venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
