@@ -377,6 +377,26 @@ function readLook(player) {
     }
 }
 
+const bankNames = { "-2": "Piggy Bank", "-3": "Safe", "-4": "Defender's Forge", "-5": "Void Vault" };
+
+// The container the player has open: world chest (id >= 0) or a bank. null when nothing is open.
+function readChest(player) {
+    try {
+        const id = player.chest;
+        if (id === -1) {
+            return null;
+        }
+        const storage = player.GetCurrentContainer();
+        let name = bankNames[String(id)] || "";
+        if (id >= 0) {
+            name = String(safe(() => Main.chest[id].name, "")) || "";
+        }
+        return { id, name, max: storage.maxItems, items: slots(storage.item, storage.maxItems) };
+    } catch (_) {
+        return null;
+    }
+}
+
 function snapshot(player, pane, page) {
     const center = player.get_Center();
     const selectionState = player.selectedItemState;
