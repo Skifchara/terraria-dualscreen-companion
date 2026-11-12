@@ -2,6 +2,7 @@ const Main = new NativeClass("Terraria", "Main");
 const ItemSlot = new NativeClass("Terraria.UI", "ItemSlot");
 const Recipe = new NativeClass("Terraria", "Recipe");
 const CraftingRequests = new NativeClass("Terraria.GameContent", "CraftingRequests");
+const GUIInstance = new NativeClass("", "GUIInstance");
 const equipmentArrays = ["armor", "dye", "miscEquips", "miscDyes"];
 const utilityContexts = [19, 20, 18, 17, 16];
 const inventorySize = 58;
@@ -47,10 +48,16 @@ function sameItem(item, expected) {
 
 function slotRef(player, key) {
     if (!Array.isArray(key) || key.length !== 2 ||
-        !key.every(Number.isInteger) || key[0] < 0 || key[0] > equipmentArrays.length + 1 || key[1] < 0) {
+        !key.every(Number.isInteger) || key[0] < 0 || key[0] > 6 || key[1] < 0) {
         throw new Error("Некорректный слот");
     }
     const [group, index] = key;
+    if (group === 6 && index === 0) {
+        return { index, item: player.trashItem };
+    }
+    if (group === 6) {
+        throw new Error("Некорректный слот корзины");
+    }
     if (group === 5) {
         if (player.chest === -1) {
             throw new Error("Контейнер закрыт");
@@ -60,7 +67,7 @@ function slotRef(player, key) {
         if (index >= Math.min(storage.maxItems, items.length)) {
             throw new Error("Некорректный слот");
         }
-        return { array: items, index, context: player.chest >= 0 ? 3 : 4, item: items[index] };
+        return { array: items, index, context: player.chest >= 0 ? 3 : 4, item: items[index], storage };
     }
     const array = group === 0 ? player.inventory : player[equipmentArrays[group - 1]];
     const count = group === 0 ? inventorySize : group === 1 ? 20 : group === 2 ? 10 : 5;
@@ -160,6 +167,9 @@ function craft(request) {
 }
 
 function transfer(player, request) {
+    if ((request.from[0] === 5 || request.to[0] === 5) && request.container !== player.chest) {
+        throw new Error("Открыт другой контейнер");
+    }
     const source = slotRef(player, request.from);
     const destination = slotRef(player, request.to);
     if (request.from[0] === request.to[0] && source.index === destination.index) {
@@ -177,6 +187,10 @@ function transfer(player, request) {
         source.item.stack -= moved;
         if (source.item.stack <= 0) {
             source.item.TurnToAir();
+        }
+        if (player.chest >= 0) {
+            if (source.storage) source.storage.SyncToChestItem(source.index);
+            if (destination.storage) destination.storage.SyncToChestItem(destination.index);
         }
         refreshRecipes();
         playSound("grab");
@@ -218,6 +232,10 @@ function transfer(player, request) {
         source.array[source.index] = sourceCopy;
         destination.array[destination.index] = destinationCopy;
         Main.set_mouseItem(cursor);
+        if (player.chest >= 0) {
+            if (source.storage) source.storage.SyncToChestItem(source.index);
+            if (destination.storage) destination.storage.SyncToChestItem(destination.index);
+        }
         throw error;
     } finally {
         Main.set_mouseLeft(false);
@@ -226,6 +244,10 @@ function transfer(player, request) {
     if (sameItem(source.array[source.index], request.expectFrom) &&
         sameItem(destination.array[destination.index], request.expectTo)) {
         throw new Error("Игра оставила слоты без изменений");
+    }
+    if (player.chest >= 0) {
+        if (source.storage) source.storage.SyncToChestItem(source.index);
+        if (destination.storage) destination.storage.SyncToChestItem(destination.index);
     }
     playSound("grab");
 }
@@ -311,6 +333,17 @@ function readBuffs(player) {
 function readInfo(player) {
     const info = {};
     try {
+        const display = GUIInstance.Active.GUIAccessoryInfo;
+        display.BuildInfoAccs();
+        const lines = display.InfoText;
+        const icons = display.DisplayIcons;
+        info.accessories = [];
+        for (let i = 0; i < Math.min(display.numInfoAccessories, lines.length, icons.length); i++) {
+            if (lines[i]) info.accessories.push([icons[i], String(lines[i])]);
+        }
+        if (info.accessories.length) return info;
+    } catch (_) { /* keep the basic readouts if this game version has a different GUI */ }
+    try {
         const center = player.get_Center();
         if (player.accWatch > 0) {
             let ticks = Main.time;
@@ -325,6 +358,8 @@ function readInfo(player) {
         }
         if (player.accDepthMeter > 0) {
             info.depth = Math.round((center.Y + player.height / 2) * 2 / 16 - Main.worldSurface * 2);
+            info.layer = player.get_ZoneSkyHeight() ? "space" : player.get_ZoneUnderworldHeight() ? "underworld"
+                : player.get_ZoneRockLayerHeight() ? "caverns" : player.get_ZoneDirtLayerHeight() ? "underground" : "surface";
         }
         if (player.accCompass > 0) {
             info.compass = Math.round(center.X * 2 / 16 - Main.maxTilesX);
@@ -412,8 +447,9 @@ function snapshot(player, pane, page) {
         info: readInfo(player),
         chest: readChest(player),
         trash: safe(() => itemState(player.trashItem), [0, 0, 0, false, ""]),
-        hp: [Math.max(0, player.statLife), player.statLifeMax2 || player.statLifeMax],
+        hp: [Math.max(0, player.statLife), player.statLifeMax2 || player.statLifeMax, player.statLifeMax],
         mana: [Math.max(0, player.statMana), player.statManaMax2 || player.statManaMax],
+        hudStyle: safe(() => Number(GUIInstance.Active.GUIHearts.ActiveSet), 1),
         position: [Math.floor(center.X / 16), Math.floor(center.Y / 16)],
         inventory: slots(player.inventory, pane === "inventory" ? inventorySize : 10)
     };
@@ -465,4 +501,4 @@ function backgrounds() {
     return result;
 }
 
-export { Main, snapshot, select, transfer, craft, backgrounds, slotRef, sameItem, refreshRecipes, playSound };
+export { Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

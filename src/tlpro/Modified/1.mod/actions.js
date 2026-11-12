@@ -7,7 +7,7 @@ const Main = game.Main;
 const ItemSlot = new NativeClass("Terraria.UI", "ItemSlot");
 const ItemSorting = new NativeClass("Terraria.UI", "ItemSorting");
 const ChestUI = new NativeClass("Terraria.UI", "ChestUI");
-const RecipeClass = new NativeClass("Terraria", "Recipe");
+const NativeObject = new NativeClass("System", "Object");
 
 function safe(read, fallback) {
     try {
@@ -84,6 +84,9 @@ function info(player, request) {
 }
 
 function checkedSlot(player, request) {
+    if (request.from?.[0] === 5 && request.container !== player.chest) {
+        throw new Error("Открыт другой контейнер");
+    }
     const ref = game.slotRef(player, request.from);
     if (!game.sameItem(ref.item, request.expectFrom)) {
         throw new Error("Слот изменился. Открой предмет снова");
@@ -136,14 +139,27 @@ function use(player, request) {
         return;
     }
     if (safe(() => item.healLife, 0) > 0) {
+        if (request.exact && !NativeObject.ReferenceEquals(player.QuickHeal_GetItemToUse(), item)) {
+            throw new Error("Этот лечебный предмет сейчас недоступен");
+        }
         player.QuickHeal();
         return;
     }
     if (safe(() => item.healMana, 0) > 0) {
+        if (request.exact && !NativeObject.ReferenceEquals(player.QuickMana_GetItemToUse(), item)) {
+            throw new Error("Этот предмет для маны сейчас недоступен");
+        }
         player.QuickMana();
         return;
     }
     if (safe(() => item.buffType, 0) > 0 && safe(() => item.consumable, false)) {
+        if (request.exact) {
+            if (!player.QuickBuff_ShouldBotherUsingThisBuff(item.buffType)) {
+                throw new Error("Этот эффект сейчас недоступен");
+            }
+            player.QuickBuff_UseItemForBuff(item, item.buffType);
+            return;
+        }
         player.QuickBuff();
         return;
     }
@@ -161,12 +177,65 @@ function use(player, request) {
     throw new Error("Этот предмет нельзя применить отсюда");
 }
 
+function withTrashInInventory(player, request, index, action) {
+    const ref = checkedSlot(player, request);
+    if (ref.item.get_IsAir() || !Main.get_mouseItem().get_IsAir() ||
+        Main.LocalPlayerHasPendingInventoryActions() || player.itemAnimation !== 0 || Main.get_mouseLeft()) {
+        throw new Error("Предмет из корзины сейчас недоступен");
+    }
+    const saved = player.inventory[index];
+    player.inventory[index] = ref.item;
+    player.trashItem = saved;
+    try {
+        action({ ...request, from: [0, index], exact: true });
+    } finally {
+        player.trashItem = player.inventory[index];
+        player.inventory[index] = saved;
+        game.refreshRecipes();
+    }
+}
+
+function trashSwap(player, request) {
+    const ref = checkedSlot(player, request);
+    if (request.from[0] !== 0 && request.from[0] !== 5) {
+        throw new Error("В корзину можно класть только из сумки или сундука");
+    }
+    const moving = ref.item;
+    const old = player.trashItem;
+    if (!game.sameItem(old, request.expectTrash)) throw new Error("Содержимое корзины изменилось");
+    if (!moving.get_IsAir() && moving.favorited) throw new Error("Избранный предмет не удаляется");
+    if (!old.get_IsAir() && request.recover &&
+        ItemSlot.PickItemMovementAction(ref.array, ref.context, ref.index, old, false, -1) < 0) {
+        throw new Error("Предмет не подходит в этот слот");
+    }
+    const source = request.recover ? old : moving;
+    const target = request.recover ? moving : old;
+    if (!source.get_IsAir() && !target.get_IsAir() && source.type === target.type &&
+        source.prefix === target.prefix && target.stack < target.maxStack) {
+        const amount = Math.min(target.maxStack - target.stack, source.stack);
+        target.stack += amount;
+        source.stack -= amount;
+        if (source.stack <= 0) source.TurnToAir();
+    } else if (request.recover) {
+        // taking the trashed item back: swap with what lies in the target slot
+        player.trashItem = moving;
+        ref.array[ref.index] = old;
+    } else {
+        // putting an item in: the trash keeps only the newest one, whatever it held before is gone
+        old.TurnToAir();
+        player.trashItem = moving;
+        ref.array[ref.index] = old;
+    }
+    if (ref.storage && player.chest >= 0) ref.storage.SyncToChestItem(ref.index);
+    game.refreshRecipes();
+}
+
 // Buttons of the chest window, each one runs the game's own routine.
 function chestAction(player, request) {
-    if (player.chest === -1) {
+    if (player.chest === -1 || request.container !== player.chest) {
         throw new Error("Контейнер закрыт");
     }
-    switch (request.op) {
+    switch (request.command) {
         case "loot":
             ChestUI.LootAll();
             break;
@@ -183,6 +252,7 @@ function chestAction(player, request) {
             ItemSorting.SortChest();
             break;
         case "close":
+            if (player.chest >= 0) player.GetCurrentContainer().SyncToChest();
             player.chest = -1;
             break;
         default:
@@ -221,6 +291,14 @@ function actWithoutSound(player, request) {
         }
         case "drop": {
             const ref = checkedSlot(player, request);
+            if (request.from[0] === 6) {
+                if (ref.item.favorited) throw new Error("Избранный предмет не выбрасывается");
+                if (player.selectedItemState.get_HasActiveOverride()) {
+                    throw new Error("Подожди, пока освободится активный слот");
+                }
+                withTrashInInventory(player, request, player.selectedItemState.get_Hotbar(), () => player.DropSelectedItem());
+                break;
+            }
             if (request.from[0] !== 0 || ref.index > 49) {
                 throw new Error("Выбросить можно только из сумки и хотбара");
             }
@@ -245,7 +323,12 @@ function actWithoutSound(player, request) {
             break;
         }
         case "use":
-            use(player, request);
+            if (request.from[0] === 6) {
+                const index = Array.from({ length: 50 }, (_, slot) => slot)
+                    .find((slot) => player.inventory[slot].get_IsAir());
+                if (index === undefined) throw new Error("Для применения нужен пустой слот");
+                withTrashInInventory(player, request, index, (staged) => use(player, staged));
+            } else use(player, request);
             break;
         case "split":
             split(player, request);
@@ -260,32 +343,9 @@ function actWithoutSound(player, request) {
         case "chest":
             chestAction(player, request);
             break;
-        case "trashswap": {
-            // The game's trash slot: swaps the slot with what lies in the trash, so it is always recoverable.
-            const ref = checkedSlot(player, request);
-            if (request.from[0] !== 0 && request.from[0] !== 5) {
-                throw new Error("В мусор можно класть только из сумки или сундука");
-            }
-            const moving = ref.item;
-            const old = player.trashItem;
-            if (!moving.get_IsAir() && moving.favorited) {
-                throw new Error("Избранный предмет не удаляется");
-            }
-            if (!moving.get_IsAir() && !old.get_IsAir() && moving.type === old.type && old.stack < old.maxStack) {
-                const room = old.maxStack - old.stack;
-                const moved = Math.min(room, moving.stack);
-                old.stack += moved;
-                moving.stack -= moved;
-                if (moving.stack <= 0) {
-                    moving.TurnToAir();
-                }
-            } else {
-                player.trashItem = moving;
-                ref.array[ref.index] = old;
-            }
-            game.refreshRecipes();
+        case "trashswap":
+            trashSwap(player, request);
             break;
-        }
         case "take": {
             const ref = checkedSlot(player, request);
             if (request.from[0] !== 5) {
@@ -297,7 +357,7 @@ function actWithoutSound(player, request) {
         }
         case "deposit": {
             const ref = checkedSlot(player, request);
-            if (request.from[0] !== 0 || ref.index > 49 || player.chest === -1) {
+            if (request.from[0] !== 0 || ref.index > 49 || player.chest === -1 || request.container !== player.chest) {
                 throw new Error("Положить можно из сумки в открытый контейнер");
             }
             ChestUI.Deposit(ref.index);

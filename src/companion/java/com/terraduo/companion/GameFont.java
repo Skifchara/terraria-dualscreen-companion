@@ -21,7 +21,8 @@ import java.util.Map;
 /**
  * Draws text with the game's own bitmap font. The glyph sheets are decoded on the PC from the user's own
  * installation (tools/extract_assets.py) and pushed to this app's private folder; the glyph metrics come from the
- * running game through the TL Pro mod ("font" request) and are cached. Without them, plain Android text is used.
+ * running game through the TL Pro mod ("font" request) and are cached. Callers use Android text when a run
+ * needs a glyph missing from the atlas.
  */
 final class GameFont {
     private static final class Glyph {
@@ -54,9 +55,22 @@ final class GameFont {
         loadMetrics();
     }
 
-    boolean ready() { return ready; }
-
     boolean needsMetrics() { return !ready && sheets[0] != null; }
+
+    boolean canDraw(String text) {
+        if (!ready) return false;
+        for (int index = 0; index < text.length();) {
+            int codePoint = text.codePointAt(index);
+            Glyph glyph = glyphs.get(codePoint);
+            if (glyph == null || (glyph.w > 0 && glyph.h > 0 && sheetFor(glyph) == null)) return false;
+            index += Character.charCount(codePoint);
+        }
+        return true;
+    }
+
+    private Bitmap sheetFor(Glyph glyph) {
+        return glyph.sheet >= 0 && glyph.sheet < sheets.length ? sheets[glyph.sheet] : null;
+    }
 
     /** Applies a response of the mod's {"op":"font","name":"mouse"} request and caches it. */
     void acceptMetrics(JSONObject response) {
@@ -114,8 +128,10 @@ final class GameFont {
     float measure(String text, float size) {
         float scale = size / lineSpacing;
         float pen = 0;
-        for (int index = 0; index < text.length(); index++) {
-            Glyph glyph = glyphs.get((int) text.charAt(index));
+        for (int index = 0; index < text.length();) {
+            int codePoint = text.codePointAt(index);
+            index += Character.charCount(codePoint);
+            Glyph glyph = glyphs.get(codePoint);
             if (glyph == null) glyph = glyphs.get((int) '?');
             if (glyph == null) continue;
             pen += glyph.left + glyph.width + glyph.right + spacing;
@@ -142,12 +158,14 @@ final class GameFont {
             tintColor = color;
         }
         float pen = 0;
-        for (int index = 0; index < text.length(); index++) {
-            Glyph glyph = glyphs.get((int) text.charAt(index));
+        for (int index = 0; index < text.length();) {
+            int codePoint = text.codePointAt(index);
+            index += Character.charCount(codePoint);
+            Glyph glyph = glyphs.get(codePoint);
             if (glyph == null) glyph = glyphs.get((int) '?');
             if (glyph == null) continue;
             pen += glyph.left;
-            Bitmap sheet = glyph.sheet >= 0 && glyph.sheet < sheets.length ? sheets[glyph.sheet] : null;
+            Bitmap sheet = sheetFor(glyph);
             if (sheet != null && glyph.w > 0 && glyph.h > 0) {
                 src.set(glyph.x, glyph.y, glyph.x + glyph.w, glyph.y + glyph.h);
                 float left = x + (pen + glyph.cropX) * scale;

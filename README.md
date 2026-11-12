@@ -31,7 +31,7 @@ crafting, chests, buffs, map and a background that follows where you are — bui
   (L1 / R1 hotbar, Y cycles the tabs).
 - **Backgrounds from the game itself** — your biome's parallax layers, cave wall textures, day / night tint, clouds,
   rain and snow, lightning flashes, damage / heal / mana edge flashes, the game's interface sounds.
-- English and Russian.
+- English, Russian, Spanish and Polish.
 
 Everything is drawn from the game's own sprites, fonts and backgrounds, decoded **on your PC from your own installed copy**
 (see [Legal](#legal)). No OCR, no fake data, no virtual taps: the game stays the authority and changes happen only through

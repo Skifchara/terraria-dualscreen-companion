@@ -71,19 +71,20 @@ final class SpriteStore {
         return null;
     }
 
-    private final Set<Integer> missingBackgrounds = new HashSet<>();
+    private final Set<String> missingBackgrounds = new HashSet<>();
 
     /** A whole background layer rebuilt from the game's tile atlas (tools/extract_backgrounds.py); null until loaded. */
-    Bitmap background(int id) {
-        String key = "bgfile:" + id;
+    Bitmap background(int id, boolean underworld) {
+        String name = (underworld ? "underworld_" : "bg_") + id;
+        String key = "bgfile:" + name;
         Bitmap cached = memory.get(key);
         if (cached != null) return cached;
         synchronized (this) {
-            if (loading.contains(key) || missingBackgrounds.contains(id) || atlasDir == null) return null;
+            if (loading.contains(key) || missingBackgrounds.contains(key) || atlasDir == null) return null;
             loading.add(key);
         }
         io.execute(() -> {
-            File file = new File(new File(atlasDir, "backgrounds"), "bg_" + id + ".png");
+            File file = new File(new File(atlasDir, "backgrounds"), name + ".png");
             Bitmap loaded = file.isFile() ? BitmapFactory.decodeFile(file.getPath()) : null;
             synchronized (this) {
                 loading.remove(key);
@@ -91,7 +92,7 @@ final class SpriteStore {
                     memory.put(key, loaded);
                     revision++;
                 } else {
-                    missingBackgrounds.add(id);
+                    missingBackgrounds.add(key);
                 }
             }
         });

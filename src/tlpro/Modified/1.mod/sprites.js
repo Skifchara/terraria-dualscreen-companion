@@ -244,6 +244,82 @@ function loadedBackgrounds() {
         alphaFront: numbers("bgAlphaFrontLayer"), alphaFar: numbers("bgAlphaFarBackLayer") };
 }
 
+function textureIds(list) {
+    const ids = [];
+    for (let index = 0; list && index < list.length && index < 12; index++) {
+        const id = list[index];
+        if (Number.isInteger(id) && id >= 0) ids.push(id);
+    }
+    return ids;
+}
+
+// Terraria.ID.SurfaceBackgroundID and the tables used by Main.DrawSurfaceBG.
+const forestRegions = { 0: 1, 10: 2, 11: 3, 12: 4 };
+const surfaceBiomes = {
+    1: ["corruptBG", [23, 22]],
+    3: ["jungleBG", []],
+    6: ["hallowBG", []],
+    7: ["snowBG", []],
+    8: ["crimsonBG", [24, 42]],
+    9: ["mushroomBG", [246, 247]]
+};
+const desertVariants = { 2: "Pure", 5: "Corrupt", 13: "Hallow", 14: "Crimson" };
+
+function desertLayers(variantName) {
+    let ids = [];
+    try {
+        const variant = Main.desertBackgroundSet[variantName];
+        ids = textureIds(variant.get_Backgrounds());
+    } catch (_) { /* the plain desert table is available on earlier builds */ }
+    if (ids.length === 0) ids = variantName === "Pure" ? textureIds(Main.desertBG) : [26];
+    return [24, 25, ...ids];
+}
+
+function surfaceBackgrounds() {
+    const style = Main.get_bgStyle();
+    const region = forestRegions[style];
+    if (region) {
+        return [...textureIds(Main["treeMntBGSet" + region]), ...textureIds(Main["treeBGSet" + region])];
+    }
+    if (style === 4) return textureIds([Main.oceanBG]);
+    if (desertVariants[style]) return desertLayers(desertVariants[style]);
+    const biome = surfaceBiomes[style];
+    if (!biome) return [];
+    const [field, mountains] = biome;
+    const far = style === 7 ? textureIds(Main.snowMntBG) : mountains;
+    return [...far, ...textureIds(Main[field])];
+}
+
+function currentBackgrounds(env) {
+    const zones = env.zones;
+    if (zones.includes("UnderworldHeight")) {
+        try {
+            // DrawUnderworldBackground draws slots 4 through 0 from TextureAssets.Underworld.
+            const ids = Main.underworldBG;
+            return ids && ids.length >= 5 ? [ids[4], ids[3], ids[2], ids[1], ids[0]] : [];
+        } catch (_) {
+            return [];
+        }
+    }
+    if (zones.includes("DirtLayerHeight") || zones.includes("RockLayerHeight")) {
+        try {
+            // Main.DrawCurrentBackground and Main.DrawRockLayer use slots 1 and 3
+            // respectively. The game fills this table with the current world's styles.
+            const ids = Main.instance.get_backTexture();
+            const id = ids[zones.includes("RockLayerHeight") ? 3 : 1];
+            return Number.isInteger(id) && id > 0 ? [id] : [];
+        } catch (_) {
+            return []; // use the companion's cave fallback on builds without this getter
+        }
+    }
+    if (zones.includes("SkyHeight")) return [];
+    try {
+        return [...new Set(surfaceBackgrounds())];
+    } catch (_) {
+        return []; // use the companion's biome fallback if a field is unavailable
+    }
+}
+
 function entries(request) {
     const list = Array.isArray(request.items) ? request.items.slice(0, 64) : [];
     return { entries: list.map((item) => {
@@ -555,4 +631,4 @@ function font(request) {
     return result;
 }
 
-export { get, font, probe, entries, tiles, loadedBackgrounds, render, targets, inspect };
+export { get, font, probe, entries, tiles, loadedBackgrounds, currentBackgrounds, render, targets, inspect };

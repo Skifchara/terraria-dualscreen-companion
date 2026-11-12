@@ -45,9 +45,9 @@ UI believes is in the slot (`expectFrom` / `expectTo`) and the mod refuses if th
 
 The game's art is **never** shipped. `extract_assets.py` pulls the user's installed APK, decodes the Unity atlases
 (index image + palette; each 256×256 block has its own palette row: `row = by * columns + (columns - 1 - bx)`), and pushes
-PNG pages to the app's private folder. `extract_backgrounds.py` rebuilds the tiled biome backgrounds: one tile is six shorts
-`[-offsetX, -offsetY, srcX0, srcY0, srcX1, srcY1]` read from `TextureAtlasEntryTiles.TileOffsetData` through the mod; palette
-index 0 is transparent.
+PNG pages to the app's private folder. `extract_backgrounds.py` reads the APK's `Background` atlas table and rebuilds the
+layers for surface, cave, and Underworld scenes. The mod reads the game's current surface style and the corresponding
+texture tables for surface, cave, and Underworld scenes.
 
 ## Things that cost us time (so you do not repeat them)
 

@@ -59,14 +59,20 @@ final class BiomeScene {
     private int[] layerIds;
     private boolean forestSurface;
     private boolean surface;
-    private boolean beach;
+    private boolean cave;
+    private boolean underworld;
+    private boolean sky;
     private JSONObject backgroundIds;
     private float playerX, playerY, worldW = 4200, surfaceY = 400, timeOfDay, lightning, rainPower;
     private float shownLightning;
     private RadialGradient vignette, flash;
     private int vignetteW, vignetteH;
     private final Paint layerPaint = new Paint();
-    private int[] recent = new int[0];   // backgrounds the game itself is drawing right now, in draw order
+    private int[] recent;   // texture IDs selected from the game's current backdrop tables
+    private static final int[] ANIMATED_SURFACE = {219, 220, 221, 235, 271, 272, 273, 281, 302,
+        303, 305, 307, 309, 311, 313, 315, 317, 326, 337, 338, 341};
+    private static final int[] ANIMATED_UNDERWORLD = {1, 6, 7, 8, 13};
+    private static final int[] DEFAULT_UNDERWORLD = {4, 3, 2, 1, 0};
 
     BiomeScene() {
         paint.setFilterBitmap(false);
@@ -75,12 +81,9 @@ final class BiomeScene {
         layerPaint.setAntiAlias(false);
     }
 
-    /** The background ids the game reported drawing (mod: LoadBackground hook), far to near. */
+    /** The background ids reported for the current scene, far to near. */
     void setRecent(JSONArray ids) {
-        if (ids == null) return;
-        int[] out = new int[ids.length()];
-        for (int index = 0; index < out.length; index++) out[index] = ids.optInt(index, -1);
-        recent = out;
+        recent = idsOf(ids);
     }
 
     /** Where the player is, in tiles (parallax follows it) and the world's size / surface depth. */
@@ -93,12 +96,13 @@ final class BiomeScene {
         night = !env.optBoolean("day", true);
         raining = env.optBoolean("rain");
         JSONArray zones = env.optJSONArray("zones");
-        boolean[] has = new boolean[0];
         java.util.HashSet<String> z = new java.util.HashSet<>();
         for (int index = 0; zones != null && index < zones.length(); index++) z.add(zones.optString(index));
         Theme theme;
         String group = null;
-        if (z.contains("UnderworldHeight")) { theme = UNDERWORLD; group = "underworldBG"; }
+        underworld = z.contains("UnderworldHeight");
+        sky = z.contains("SkyHeight");
+        if (underworld) theme = UNDERWORLD;
         else if (z.contains("Dungeon")) theme = DUNGEON;
         else if (z.contains("Glowshroom")) { theme = MUSHROOM; group = "mushroomBG"; }
         else if (z.contains("Corrupt")) { theme = CORRUPT; group = "corruptBG"; }
@@ -106,7 +110,7 @@ final class BiomeScene {
         else if (z.contains("Hallow")) { theme = HALLOW; group = "hallowBG"; }
         else if (z.contains("RockLayerHeight")) theme = ROCK;
         else if (z.contains("DirtLayerHeight")) theme = CAVE;
-        else if (z.contains("SkyHeight")) theme = night ? SPACE : SKY;
+        else if (sky) theme = night ? SPACE : SKY;
         else if (z.contains("Snow")) { theme = night ? SNOW_NIGHT : SNOW; group = "snowBG"; }
         else if (z.contains("Jungle")) { theme = JUNGLE; group = "jungleBG"; }
         else if (z.contains("Desert")) { theme = DESERT; group = "desertBG"; }
@@ -120,40 +124,44 @@ final class BiomeScene {
         timeOfDay = (float) env.optDouble("time", 0) / (night ? 32400f : 54000f);
         lightning = (float) env.optDouble("lightning", 0);
         rainPower = (float) env.optDouble("rainPower", 0);
-        boolean underground = z.contains("DirtLayerHeight") || z.contains("RockLayerHeight") || z.contains("UnderworldHeight")
-            || z.contains("Dungeon");
-        surface = !underground && !z.contains("SkyHeight");
-        beach = z.contains("Beach");
+        cave = !underworld && (z.contains("DirtLayerHeight") || z.contains("RockLayerHeight") || z.contains("Dungeon"));
+        surface = !cave && !underworld && !sky;
+        boolean beach = z.contains("Beach");
         forestSurface = surface && group == null && !beach && !z.contains("Desert");
-        // caves: the game's own tiled wall textures, picked by biome and by dirt / rock layer
-        if (underground && !z.contains("UnderworldHeight") && !z.contains("Dungeon")) {
+        if (underworld) {
+            int[] variant = backgrounds == null ? null : idsOf(backgrounds.optJSONArray("underworldBG"));
+            layerIds = variant != null && variant.length >= 5
+                ? new int[]{variant[4], variant[3], variant[2], variant[1], variant[0]} : DEFAULT_UNDERWORLD;
+        }
+        if (sky && !night) layerIds = new int[]{0};
+        // Tiled cave backgrounds for mods that do not report the game's current selection.
+        if (cave) {
             boolean rock = z.contains("RockLayerHeight");
-            int cave;
-            if (z.contains("Glowshroom")) cave = rock ? 65 : 63;
-            else if (z.contains("Corrupt")) cave = rock ? 195 : 193;
-            else if (z.contains("Crimson")) cave = rock ? 201 : 202;
-            else if (z.contains("Hallow")) cave = rock ? 206 : 200;
-            else if (z.contains("Snow")) cave = rock ? 167 : 32;
-            else if (z.contains("Jungle")) cave = rock ? 149 : 147;
-            else if (z.contains("Desert") || z.contains("UndergroundDesert")) cave = rock ? 190 : 189;
+            int id;
+            if (z.contains("Glowshroom")) id = rock ? 65 : 63;
+            else if (z.contains("Corrupt")) id = rock ? 195 : 193;
+            else if (z.contains("Crimson")) id = rock ? 201 : 202;
+            else if (z.contains("Hallow")) id = rock ? 206 : 200;
+            else if (z.contains("Snow")) id = rock ? 167 : 32;
+            else if (z.contains("Jungle")) id = rock ? 149 : 147;
+            else if (z.contains("Desert") || z.contains("UndergroundDesert")) id = rock ? 190 : 189;
             else {
                 // plain dirt / stone caves: the game's style number picks the pair (brown dirt, grey stone).
                 // style 4 was read from a running game (it loaded 71 and 72); the others are the neighbouring pairs.
                 int style = env.optInt("under", 4);
                 int[][] pairs = {{67, 69}, {74, 76}, {78, 80}, {81, 82}, {71, 72}, {84, 86}};
                 int[] pair = pairs[Math.max(0, Math.min(pairs.length - 1, style))];
-                cave = rock ? pair[1] : pair[0];
+                id = rock ? pair[1] : pair[0];
             }
-            layerIds = new int[]{cave};
+            layerIds = new int[]{id};
         }
         if (surface && backgrounds != null) {
-            if (group != null && !group.equals("underworldBG")) layerIds = idsOf(backgrounds, group);
+            if (group != null) layerIds = idsOf(backgrounds.optJSONArray(group));
             else if (beach && backgrounds.has("oceanBG")) layerIds = new int[]{backgrounds.optInt("oceanBG", -1)};
         }
     }
 
-    private static int[] idsOf(JSONObject source, String name) {
-        JSONArray array = source.optJSONArray(name);
+    private static int[] idsOf(JSONArray array) {
         if (array == null) return null;
         int[] out = new int[array.length()];
         for (int index = 0; index < out.length; index++) out[index] = array.optInt(index, -1);
@@ -164,8 +172,7 @@ final class BiomeScene {
     private int[] forestLayers() {
         if (backgroundIds == null) return null;
         int region = Math.max(0, Math.min(3, (int) (playerX / worldW * 4)));
-        int[] set = idsOf(backgroundIds, "treeBGSet" + (region + 1));
-        return set;
+        return idsOf(backgroundIds.optJSONArray("treeBGSet" + (region + 1)));
     }
 
     void draw(Canvas canvas, int width, int height, long now, SpriteStore sprites) {
@@ -196,12 +203,9 @@ final class BiomeScene {
             || target == SNOW) clouds(w, h, time);
         int[] layers = layerIds;
         if (forestSurface) layers = forestLayers();
-        if (recent.length > 0) layers = recent;
-        boolean real = false;
-        if (layers != null) {
-            for (int id : layers) if (id > 0 && sprites.background(id) != null) real = true;
-        }
-        if (!real) {
+        if (hasLayer(sprites, recent)) layers = recent;
+        boolean real = hasLayer(sprites, layers);
+        if (!real && !sky) {
             hills(w, h, time * 1.2f, 0.52f, target.far, 7, 0.5f);
             hills(w, h, time * 2.4f, 0.66f, target.near, 5, 0.8f);
         }
@@ -213,6 +217,15 @@ final class BiomeScene {
         canvas.drawBitmap(low, src, dst, paint);
         if (real) realLayers(canvas, width, height, time, sprites, layers);
         edges(canvas, width, height, time);
+    }
+
+    private boolean hasLayer(SpriteStore sprites, int[] ids) {
+        if (ids == null) return false;
+        for (int id : ids) {
+            Bitmap bitmap = id < 0 ? null : sprites.background(id, underworld);
+            if (bitmap != null && (!cave || bitmap.getHeight() > 16)) return true;
+        }
+        return false;
     }
 
     /** Daylight 0..1 from the game's clock: full sun at noon, dark at night, a warm ramp at dawn and dusk. */
@@ -230,12 +243,13 @@ final class BiomeScene {
         int green = (int) (255 * Math.min(1f, light * (1f - 0.1f * warm)));
         int blue = (int) (255 * Math.min(1f, light * (night ? 1.45f : 1f - 0.28f * warm)));
         LightingColorFilter dayFilter = new LightingColorFilter(0xff000000 | (red << 16) | (green << 8) | blue, 0);
-        layerPaint.setColorFilter(dayFilter);
+        layerPaint.setColorFilter(underworld ? null : dayFilter);
         float scale = height / 1080f * 1.15f;
         // clouds high in the sky, slow drift
         if (surface && backgroundIds != null) {
-            int[] clouds = idsOf(backgroundIds, "cloudBG");
-            Bitmap cloud = clouds != null && clouds.length > 0 ? sprites.background(clouds[0]) : null;
+            int[] clouds = idsOf(backgroundIds.optJSONArray("cloudBG"));
+            Bitmap cloud = clouds != null && clouds.length > 0 && clouds[0] >= 0 && !contains(layers, clouds[0])
+                ? sprites.background(clouds[0], false) : null;
             if (cloud != null) {
                 float cs = height / 1080f * 0.9f;
                 float cw = cloud.getWidth() * cs;
@@ -252,28 +266,47 @@ final class BiomeScene {
         }
         float[] speed = {0.10f, 0.22f, 0.40f};
         int panorama = 0;
-        for (int layer = 0; layer < layers.length; layer++) {
-            if (layers[layer] <= 0) continue;
-            Bitmap bitmap = sprites.background(layers[layer]);
+        for (int id : layers) {
+            if (id < 0) continue;
+            Bitmap bitmap = sprites.background(id, underworld);
             if (bitmap == null) continue;
-            if (bitmap.getWidth() <= 200) {
-                tiledTexture(canvas, bitmap, width, height, time, layer);
+            if (cave) {
+                tiledTexture(canvas, bitmap, width, height, time);
                 layerPaint.setColorFilter(dayFilter);
                 continue;
             }
+            if (id == 0 && !underworld) {
+                src.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
+                dst.set(0, 0, width, height);
+                canvas.drawBitmap(bitmap, src, dst, layerPaint);
+                continue;
+            }
+            int frame = ((int) (time * 4)) % 4;
+            int sw = bitmap.getWidth();
+            int sh = bitmap.getHeight();
+            int sx = 0;
+            int sy = 0;
+            // Main.GetBackgroundRect and DrawUnderworldBackgroudLayer split these sheets into four frames.
+            if (contains(underworld ? ANIMATED_UNDERWORLD : ANIMATED_SURFACE, id)) {
+                sw /= 2;
+                sh /= 2;
+                sx = (frame % 2) * sw;
+                sy = (frame / 2) * sh;
+            }
             int slot = Math.min(2, panorama++);
-            float bw = bitmap.getWidth() * scale;
-            float bh = bitmap.getHeight() * scale;
+            float layerScale = underworld ? height / 858f : scale;
+            float bw = sw * layerScale;
+            float bh = sh * layerScale;
             // horizontal parallax: the real position of the player, plus a gentle idle sway
-            float shift = -(playerX * 16f * speed[slot] * scale * 0.5f + time * (1.5f + slot * 1.2f));
+            float shift = -(playerX * 16f * speed[slot] * layerScale * 0.5f + time * (1.5f + slot * 1.2f));
             shift = shift % bw;
             if (shift > 0) shift -= bw;
             // vertical: deeper -> the scenery sinks a little
             float sink = Math.max(-0.04f, Math.min(0.12f, (playerY - surfaceY) / 400f)) * height * (0.4f + slot * 0.3f);
-            float top = height - bh + sink + height * 0.04f;
+            float top = underworld ? (height - bh) / 2 : height - bh + sink + height * 0.04f;
+            src.set(sx, sy, sx + sw, sy + sh);
             for (float x = shift; x < width; x += bw) {
                 dst.set(Math.round(x), Math.round(top), Math.round(x + bw) + 1, Math.round(top + bh));
-                src.set(0, 0, bitmap.getWidth(), bitmap.getHeight());
                 canvas.drawBitmap(bitmap, src, dst, layerPaint);
             }
         }
@@ -281,7 +314,12 @@ final class BiomeScene {
     }
 
     /** Cave walls: a small texture the game tiles across the whole view, moving slower than the player. */
-    private void tiledTexture(Canvas canvas, Bitmap bitmap, int width, int height, float time, int layer) {
+    private static boolean contains(int[] ids, int value) {
+        for (int id : ids) if (id == value) return true;
+        return false;
+    }
+
+    private void tiledTexture(Canvas canvas, Bitmap bitmap, int width, int height, float time) {
         if (bitmap.getHeight() <= 16) return;   // the 16-pixel strips are the ragged edge at the surface
         float scale = height / 1080f * 3f;
         float tw = bitmap.getWidth() * scale;

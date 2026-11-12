@@ -2,6 +2,7 @@ import * as game from "./game.js";
 import * as map from "./map.js";
 import * as sprites from "./sprites.js";
 import * as actions from "./actions.js";
+import * as shop from "./shop.js";
 const Main = game.Main;
 const TcpListener = new NativeClass("System.Net.Sockets", "TcpListener");
 const IPAddress = new NativeClass("System.Net", "IPAddress");
@@ -20,6 +21,10 @@ let nextTick = 0;
 let nextListen = 0;
 let hideUntil = 0;
 let hideMap = false;
+let mirrorChest = -1;
+let mirrorShop = 0;
+let mirroredWasOpen = false;
+let inventoryShutUntil = 0;   // after a mirrored chest / shop closes the game may flag its inventory open for a few frames
 const hudHooks = [];
 
 function report(message) {
@@ -27,12 +32,36 @@ function report(message) {
     tl.file.write("terraduo-status.txt", message);
 }
 
+function mirroredInteraction() {
+    return (mirrorChest !== -1 && Main.get_LocalPlayer().chest === mirrorChest) ||
+        (mirrorShop > 0 && Main.get_npcShop() === mirrorShop);
+}
+
+function finishMirroredInteraction(force = false) {
+    if (Main.gameMenu || Main.netMode !== 0 || (Date.now() >= hideUntil && !force)) {
+        mirroredWasOpen = false;
+        return;
+    }
+    if ((mirroredWasOpen || force) && Main.get_LocalPlayer().chest === -1 && Main.get_npcShop() === 0) {
+        inventoryShutUntil = Date.now() + 1500;
+    }
+    if ((mirroredWasOpen || force) && Main.get_LocalPlayer().chest === -1 && Main.get_npcShop() === 0 &&
+        Main.get_playerInventory()) {
+        try {
+            GUIInstanceClass.Active.GUIPageIcons["void Close(bool hideChat)"](false);
+        } catch (_) {
+            Main.set_playerInventory(false);
+        }
+    }
+    mirroredWasOpen = mirroredInteraction();
+}
+
 function hideWhileConnected(className, method, shouldHide) {
     try {
         new NativeClass("", className)[method].hook((original, self) => {
             guardInventory();
             if (Date.now() >= hideUntil || Main.gameMenu || Main.netMode !== 0 ||
-                (Main.get_playerInventory() && !yWindow()) || !shouldHide()) {
+                (Main.get_playerInventory() && !yWindow() && !mirroredInteraction()) || !shouldHide()) {
                 original(self);
             }
         });
@@ -50,6 +79,8 @@ for (const [name, method] of [["GUIHearts", "Draw"], ["GUIMana", "Draw"], ["GUIH
     hideWhileConnected(name, method, () => true);
 }
 hideWhileConnected("GUIMap", "DrawMap", () => hideMap && !Main.get_mapFullscreen());
+// Keep the container and its inventory session open. Suppress only the mirrored page's rendering.
+hideWhileConnected("GUIPageIcons", "Draw", mirroredInteraction);
 
 function closeConnection() {
     const current = connection;
@@ -113,8 +144,10 @@ function respond(player, request, error, mapState) {
         return;
     }
     state.pad = pad;
+    state.shop = shop.stock(player);
     state.hud = Date.now() < hideUntil;
     state.hudAvailable = hudHooks.length !== 0;
+    state.bgNow = sprites.currentBackgrounds(state.env);
     if (mapState) {
         state.map = mapState;
     }
@@ -129,6 +162,9 @@ function runRequest(player, request, now) {
     if (!request.legacy) {
         hideUntil = request.hide === true ? now + 1700 : 0;
         hideMap = request.hide === true;
+        mirrorChest = Number.isInteger(request.mirrorChest) ? request.mirrorChest : -1;
+        mirrorShop = Number.isInteger(request.mirrorShop) ? request.mirrorShop : 0;
+        finishMirroredInteraction();
     }
     switch (request.op) {
         case "state":
@@ -194,12 +230,16 @@ function runRequest(player, request, now) {
             send(actions.info(player, request));
             break;
         case "act":
-            actions.act(player, request);
+            if (request.kind === "shop") shop.act(player, request);
+            else actions.act(player, request);
+            if ((request.kind === "chest" || request.kind === "shop") && request.command === "close") {
+                finishMirroredInteraction(true);
+            }
             report("Terraduo action " + request.kind);
             respond(player, request);
             break;
         case "npc":
-            send(actions.npc());
+            send({ ...actions.npc(), canShop: shop.canOpen(player) });
             break;
         case "sound":
             game.playSound(String(request.name));
@@ -381,7 +421,8 @@ function yWindow() {
 }
 
 function guardInventory() {
-    if (!yWindow()) {
+    const afterContainer = Date.now() < hideUntil && Date.now() < inventoryShutUntil;
+    if ((!yWindow() && !afterContainer) || mirroredInteraction()) {
         return;
     }
     try {
@@ -445,6 +486,7 @@ Main.DoUpdate.hook((original, self, gameTime) => {
     noteY();
     holdInventoryShut();
     original(self, gameTime);
+    finishMirroredInteraction();
     rescueBumpers(before, inventoryBefore);
     const now = Date.now();
     if (now < nextTick) {

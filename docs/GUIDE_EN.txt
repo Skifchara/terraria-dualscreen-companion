@@ -29,11 +29,10 @@ TERRADUO COMPANION  -  USER GUIDE (English)
           python tools/extract_assets.py --push
       This pulls the installed game APK, decodes interface, items, buffs, map icons, fonts and
       pushes them to /sdcard/Android/data/com.terraduo.companion/files/atlas/.
-   c) Start Terraria through TL Pro, enter a single-player world, then:
-          adb forward tcp:38656 tcp:38656
+   c) With the device still connected:
           python tools/extract_backgrounds.py --push
-      This reads the background tile tables from the running game and builds the biome backdrops
-      (a few minutes the first time).
+      This rebuilds the biome backdrops and Underworld layers from the installed APK.
+      Use --apk /path/to/base.apk if you already have a copy of your installed APK.
    Without this step the app still works but draws plain frames instead of sprites.
 
 5. EVERYDAY USE
@@ -85,7 +84,7 @@ TERRADUO COMPANION  -  USER GUIDE (English)
    * "Open a single-player world through TL Pro": load a world, check the mod is enabled, restart
      the game from TL Pro after updating the mod, then reopen the companion.
    * Empty slots without pictures: repeat step 4 (the sprites are missing or outdated).
-   * Background is a generated sky: run extract_backgrounds.py (step 4c) with the game in a world.
+   * Background is a generated sky: run extract_backgrounds.py (step 4c).
    * Game crashes when you enter a world: disable the mod pack, enter the world, and report the log.
    * Second screen goes black: the app keeps it awake; wake it with the power button if needed.
    * The app disappears when you switch games: reopen it from the launcher icon.
