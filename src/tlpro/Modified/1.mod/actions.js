@@ -476,7 +476,14 @@ function actWithoutSound(player, request) {
             if (Main.debuff[type]) {
                 throw new Error("Дебафф нельзя снять");
             }
-            player.DelBuff(slot);
+            // A pet whose item still sits in the pet slot would come straight back; the game hides it instead.
+            if (Main.vanityPet[type]) {
+                player.TogglePet();
+            } else if (Main.lightPet[type]) {
+                player.ToggleLight();
+            } else {
+                player.DelBuff(slot);
+            }
             break;
         }
         case "mount":
