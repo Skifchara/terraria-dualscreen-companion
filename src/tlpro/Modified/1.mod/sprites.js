@@ -197,15 +197,41 @@ function tintOf(request) {
     return undefined;
 }
 
+// Tall sprites (the town NPCs, big bosses) are stored frame by frame as separate trimmed pieces: the pieces covering the first frame.
+function tileOf(entry, request, texture, frames) {
+    try {
+        const tw = entry.TileWidth;
+        const th = entry.TileHeight;
+        if (!(tw > 0 && th > 0)) {
+            return undefined;
+        }
+        const found = tileClass();
+        const trim = !!entry.TileTrimming;
+        const offset = entry.TileDataOffset;
+        const frameHeight = Math.max(1, Math.floor(entry.TextureHeight / Math.max(1, frames)));
+        const columns = Math.ceil(entry.TextureWidth / tw);
+        const rows = Math.ceil(frameHeight / th);
+        const count = columns * rows * (trim ? 6 : 4);
+        const data = [];
+        for (let index = 0; index < count; index++) {
+            data.push(found.data[offset + index]);
+        }
+        return { tw, th, trim, columns, data };
+    } catch (_) {
+        return undefined;
+    }
+}
+
 function entryOf(request) {
     const texture = find(request).Value;
     const entry = texture.PackedEntry;
     const atlas = texture._textureAtlas;
-    return { tint: tintOf(request), kind: request.kind, id: request.id, name: request.name, w: texture.Width, h: texture.Height,
+    const frames = frameCount(request, texture);
+    return { tile: tileOf(entry, request, texture, frames), tint: tintOf(request), kind: request.kind, id: request.id, name: request.name, w: texture.Width, h: texture.Height,
         db: String(atlas.Id), page: entry.AtlasIndex, x: entry.TextureOffsetX, y: entry.TextureOffsetY,
         sw: entry.TextureWidth, sh: entry.TextureHeight, scale: entry.TextureScale,
         pw: texture.get_UnityTexture().get_width(), ph: texture.get_UnityTexture().get_height(),
-        frames: frameCount(request, texture) };
+        frames };
 }
 
 // Diagnostics for the tiled background atlas: where an entry keeps its tile table inside TileOffsetData.

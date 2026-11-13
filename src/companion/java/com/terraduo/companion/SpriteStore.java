@@ -44,7 +44,7 @@ final class SpriteStore {
     private volatile int revision;
 
     SpriteStore(Context context) {
-        cacheDir = new File(context.getFilesDir(), "sprites8");
+        cacheDir = new File(context.getFilesDir(), "sprites10");
         //noinspection ResultOfMethodCallIgnored
         cacheDir.mkdirs();
         File external = context.getExternalFilesDir(null);
@@ -194,6 +194,12 @@ final class SpriteStore {
                 decoder = BitmapRegionDecoder.newInstance(page.getPath(), false);
                 decoders.put(name, decoder);
             }
+            JSONObject tile = entry.optJSONObject("tile");
+            if (tile != null) {
+                Bitmap stitched = stitch(decoder, tile, width, height, x, y);
+                JSONArray tintArray = entry.optJSONArray("tint");
+                return tintArray == null || stitched == null ? stitched : tinted(stitched, tintArray);
+            }
             if (x < 0 || y < 0 || x + width > decoder.getWidth() || y + height > decoder.getHeight()) return null;
             Bitmap region = decoder.decodeRegion(new Rect(x, y, x + width, y + height), null);
             JSONArray tint = entry.optJSONArray("tint");
@@ -201,6 +207,32 @@ final class SpriteStore {
         } catch (IOException | IllegalArgumentException error) {
             return null;
         }
+    }
+
+    /** The first frame of a sprite the atlas stores as separate (optionally trimmed) pieces, put back together. */
+    private static Bitmap stitch(BitmapRegionDecoder decoder, JSONObject tile, int width, int height, int originX, int originY) {
+        JSONArray data = tile.optJSONArray("data");
+        if (data == null || width <= 0 || height <= 0) return null;
+        int tw = tile.optInt("tw");
+        int th = tile.optInt("th");
+        int columns = Math.max(1, tile.optInt("columns", 1));
+        boolean trim = tile.optBoolean("trim");
+        int stride = trim ? 6 : 4;
+        Bitmap out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(out);
+        for (int index = 0; (index + 1) * stride <= data.length(); index++) {
+            int base = index * stride;
+            int ox = trim ? data.optInt(base) : 0;
+            int oy = trim ? data.optInt(base + 1) : 0;
+            int x0 = originX + data.optInt(base + stride - 4);
+            int y0 = originY + data.optInt(base + stride - 3);
+            int x1 = originX + data.optInt(base + stride - 2);
+            int y1 = originY + data.optInt(base + stride - 1);
+            if (x1 <= x0 || y1 <= y0 || x0 < 0 || y0 < 0 || x1 > decoder.getWidth() || y1 > decoder.getHeight()) continue;
+            Bitmap piece = decoder.decodeRegion(new Rect(x0, y0, x1, y1), null);
+            if (piece != null) canvas.drawBitmap(piece, (index % columns) * tw - ox, (index / columns) * th - oy, null);
+        }
+        return out;
     }
 
     /** The game draws such items (Gel...) from a grey sprite, tinted with the item's colour; do the same once. */
