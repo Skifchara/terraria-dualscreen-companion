@@ -68,6 +68,16 @@ final class BiomeScene {
     private RadialGradient vignette, flash;
     private int vignetteW, vignetteH;
     private final Paint layerPaint = new Paint();
+    // Smooth changes of scenery: a layer fades in when it first appears, and the layers of the scene that was just left stay
+    // underneath while the new ones fade in over them.
+    private static final long FADE_MS = 800;
+    private final java.util.HashMap<Integer, Long> seen = new java.util.HashMap<>();
+    private int[] drawnLayers;
+    private boolean drawnCave, drawnUnderworld, drawnSurface;
+    private int[] oldLayers;
+    private boolean oldCave, oldUnderworld, oldSurface;
+    private long oldUntil;
+    private boolean layerFading;
     private int[] recent;   // texture IDs selected from the game's current backdrop tables
     private static final int[] ANIMATED_SURFACE = {219, 220, 221, 235, 271, 272, 273, 281, 302,
         303, 305, 307, 309, 311, 313, 315, 317, 326, 337, 338, 341};
@@ -205,7 +215,8 @@ final class BiomeScene {
         if (forestSurface) layers = forestLayers();
         if (hasLayer(sprites, recent)) layers = recent;
         boolean real = hasLayer(sprites, layers);
-        if (!real && !sky) {
+        trackScene(real ? layers : null, now);
+        if ((!real || layerFading) && !sky) {
             hills(w, h, time * 1.2f, 0.52f, target.far, 7, 0.5f);
             hills(w, h, time * 2.4f, 0.66f, target.near, 5, 0.8f);
         }
@@ -215,8 +226,43 @@ final class BiomeScene {
         src.set(0, 0, w, h);
         dst.set(0, 0, width, height);
         canvas.drawBitmap(low, src, dst, paint);
-        if (real) realLayers(canvas, width, height, time, sprites, layers);
+        if (oldLayers != null && now < oldUntil) {
+            boolean keepCave = cave, keepUnder = underworld, keepSurface = surface;
+            cave = oldCave;
+            underworld = oldUnderworld;
+            surface = oldSurface;
+            realLayers(canvas, width, height, time, sprites, oldLayers, now, false);
+            cave = keepCave;
+            underworld = keepUnder;
+            surface = keepSurface;
+        } else {
+            oldLayers = null;
+        }
+        if (real) realLayers(canvas, width, height, time, sprites, layers, now, true);
+        else layerFading = false;
         edges(canvas, width, height, time);
+    }
+
+    /** Remembers the scenery that was just left so it can be faded out, and forgets fade-in times of layers that are gone. */
+    private void trackScene(int[] layers, long now) {
+        if (drawnLayers != null && layers != null && !java.util.Arrays.equals(drawnLayers, layers)) {
+            oldLayers = drawnLayers;
+            oldCave = drawnCave;
+            oldUnderworld = drawnUnderworld;
+            oldSurface = drawnSurface;
+            oldUntil = now + FADE_MS;
+        }
+        if (layers != null) {
+            drawnLayers = layers;
+            drawnCave = cave;
+            drawnUnderworld = underworld;
+            drawnSurface = surface;
+        }
+        java.util.Iterator<Integer> it = seen.keySet().iterator();
+        while (it.hasNext()) {
+            int id = it.next();
+            if (layers == null || !contains(layers, id)) it.remove();
+        }
     }
 
     private boolean hasLayer(SpriteStore sprites, int[] ids) {
@@ -235,7 +281,21 @@ final class BiomeScene {
         return night ? 0.34f + 0.12f * arc : Math.min(1f, 0.34f + 1.1f * arc);
     }
 
-    private void realLayers(Canvas canvas, int width, int height, float time, SpriteStore sprites, int[] layers) {
+    private int fadeAlpha(int id, long now, boolean fading) {
+        if (!fading) return 255;
+        Long first = seen.get(id);
+        if (first == null) {
+            first = now;
+            seen.put(id, first);
+        }
+        float p = Math.min(1f, (now - first) / (float) FADE_MS);
+        if (p < 1f) layerFading = true;
+        return Math.round(255 * p * p * (3 - 2 * p));
+    }
+
+    private void realLayers(Canvas canvas, int width, int height, float time, SpriteStore sprites, int[] layers, long now,
+                            boolean fading) {
+        if (fading) layerFading = false;
         float light = daylight();
         float t = Math.max(0f, Math.min(1f, timeOfDay));
         float warm = night ? 0f : Math.max(0f, 1f - Math.min(t, 1f - t) / 0.12f);   // dawn / dusk
@@ -270,6 +330,7 @@ final class BiomeScene {
             if (id < 0) continue;
             Bitmap bitmap = sprites.background(id, underworld);
             if (bitmap == null) continue;
+            layerPaint.setAlpha(fadeAlpha(id, now, fading));
             if (cave) {
                 tiledTexture(canvas, bitmap, width, height, time);
                 layerPaint.setColorFilter(dayFilter);
@@ -310,6 +371,7 @@ final class BiomeScene {
                 canvas.drawBitmap(bitmap, src, dst, layerPaint);
             }
         }
+        layerPaint.setAlpha(255);
         layerPaint.setColorFilter(null);
     }
 

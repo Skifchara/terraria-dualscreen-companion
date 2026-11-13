@@ -466,6 +466,19 @@ function actWithoutSound(player, request) {
         case "buff":
             player.QuickBuff();
             break;
+        case "cancelbuff": {
+            // Like clicking a buff icon in the game: pets and potion buffs end, debuffs cannot be removed.
+            const slot = request.slot;
+            const type = request.type;
+            if (!Number.isInteger(slot) || slot < 0 || slot >= 22 || player.buffType[slot] !== type || type <= 0) {
+                throw new Error("Этого баффа уже нет");
+            }
+            if (Main.debuff[type]) {
+                throw new Error("Дебафф нельзя снять");
+            }
+            player.DelBuff(slot);
+            break;
+        }
         case "mount":
             player.QuickMount();
             break;

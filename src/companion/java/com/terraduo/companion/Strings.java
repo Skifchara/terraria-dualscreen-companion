@@ -117,6 +117,8 @@ final class Strings {
         put("show_hud", "Show HUD", "Вернуть HUD", "Mostrar HUD", "Pokaż HUD");
         put("open_world", "Open a single-player world through TL Pro", "Открой одиночный мир через TL Pro", "Abre un mundo de un jugador desde TL Pro", "Otwórz świat dla jednego gracza przez TL Pro");
         put("pick_target", "choose a destination slot", "выбери слот назначения", "elige una ranura de destino", "wybierz pole docelowe");
+        put("buff_removed", "Removed", "Снято", "Quitado", "Usunięto");
+        put("buff_debuff", "A debuff can't be removed", "Дебафф нельзя снять", "Un perjuicio no se puede quitar", "Debuffa nie można zdjąć");
         put("hint_drag", "Drag an item to move it", "Перетащи предмет, чтобы переместить", "Arrastra un objeto para moverlo", "Przeciągnij przedmiot, aby go przenieść");
         put("coins_ammo", "Coins and ammo", "Монеты и боеприпасы", "Monedas y munición", "Monety i amunicja");
         put("armor", "Armor and accessories", "Броня и аксессуары", "Armadura y accesorios", "Pancerz i akcesoria");

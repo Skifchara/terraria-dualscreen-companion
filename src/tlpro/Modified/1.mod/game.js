@@ -482,14 +482,15 @@ function buffName(type) {
     return buffNames.get(type);
 }
 
-// Active buffs and debuffs: [type, ticks left, isDebuff, localised name]
+// Active buffs and debuffs: [type, ticks left, isDebuff, localised name, isPet, slot]
 function readBuffs(player) {
     const result = [];
     try {
         for (let index = 0; index < 22; index++) {
             const type = player.buffType[index];
             if (type > 0) {
-                result.push([type, player.buffTime[index], !!Main.debuff[type], buffName(type)]);
+                result.push([type, player.buffTime[index], !!Main.debuff[type], buffName(type),
+                    !!(Main.vanityPet[type] || Main.lightPet[type]), index]);
             }
         }
     } catch (_) { /* buffs unavailable */ }

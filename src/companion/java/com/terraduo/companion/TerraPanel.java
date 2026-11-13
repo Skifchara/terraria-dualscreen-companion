@@ -111,6 +111,7 @@ final class TerraPanel extends View {
     private boolean spriteTurn;
     private String feedback = "";
     private long feedbackUntil;
+    private boolean feedbackLocal;   // a message made here (buff name, no room) that the mod's next reply must not wipe
     private int chosenGroup = -1, chosenIndex = -1;
     private float scrollY, viewHeight, neededHeight;
     private float listScroll;
@@ -304,9 +305,10 @@ final class TerraPanel extends View {
         } else {
             if (response.has("error")) {
                 feedback = response.optString("error");
+                feedbackLocal = false;
                 feedbackUntil = SystemClock.uptimeMillis() + 2800;
                 if (sheetOpen && sheetInfo == null) sheetOpen = false;
-            } else if (action) {
+            } else if (action && !feedbackLocal) {
                 feedback = "";
             }
             JSONObject pad = response.optJSONObject("pad");
@@ -2808,7 +2810,10 @@ final class TerraPanel extends View {
         boolean longPress = SystemClock.uptimeMillis() - downAt > 420;
         switch (hit.type) {
             case 1: openPane(hit.index); break;
-            case 2: pressButton(hit.name); break;
+            case 2:
+                if (longPress && hit.name.startsWith("buff_")) cancelBuff(Integer.parseInt(hit.name.substring(5)));
+                else pressButton(hit.name);
+                break;
             case 3: selectedRecipe = hit.index; break;
             case 5: shopSelection = hit.index; break;
             case 9: sheetOpen = false; recipeViewOpen = false; splitMode = 0; sound("close"); break;
@@ -2824,6 +2829,28 @@ final class TerraPanel extends View {
             if (hit.rect.contains(x, y)) return hit;
         }
         return null;
+    }
+
+    /** Ends a buff (a tap on a pet, a long press on anything else); debuffs cannot be removed. */
+    private void cancelBuff(int index) {
+        JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
+        JSONArray buff = buffs == null ? null : buffs.optJSONArray(index);
+        if (buff == null) return;
+        sound("tick");
+        if (buff.optBoolean(2)) {
+            feedback = Strings.get("buff_debuff");
+            feedbackLocal = true;
+            feedbackUntil = SystemClock.uptimeMillis() + 2200;
+            return;
+        }
+        JSONObject command = op("act");
+        TlProPanel.put(command, "kind", "cancelbuff");
+        TlProPanel.put(command, "type", buff.optInt(0));
+        TlProPanel.put(command, "slot", buff.optInt(5, index));
+        send.accept(command);
+        feedback = Strings.get("buff_removed") + ": " + buff.optString(3);
+        feedbackLocal = true;
+        feedbackUntil = SystemClock.uptimeMillis() + 2200;
     }
 
     private void pressButton(String name) {
@@ -2911,9 +2938,13 @@ final class TerraPanel extends View {
         if (name.startsWith("buff_")) {
             JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
             JSONArray buff = buffs == null ? null : buffs.optJSONArray(Integer.parseInt(name.substring(5)));
-            if (buff != null) {
+            if (buff != null && buff.optBoolean(4)) {
+                // a pet or light pet: tapping its icon sends it away, like clicking the buff in the game
+                cancelBuff(Integer.parseInt(name.substring(5)));
+            } else if (buff != null) {
                 int seconds = buff.optInt(1) / 60;
                 feedback = buff.optString(3) + (seconds > 0 ? "  " + (seconds / 60) + ":" + (seconds % 60 < 10 ? "0" : "") + (seconds % 60) : "");
+                feedbackLocal = true;
                 feedbackUntil = SystemClock.uptimeMillis() + 2600;
             }
             return;
@@ -2999,6 +3030,7 @@ final class TerraPanel extends View {
             shakeIndex = index;
             shakeAt = SystemClock.uptimeMillis();
             feedback = Strings.get("no_room");
+            feedbackLocal = true;
             feedbackUntil = shakeAt + 2000;
             return;
         }
