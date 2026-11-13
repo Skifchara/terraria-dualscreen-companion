@@ -62,6 +62,39 @@ function stock(player) {
     return { id, talk: player.talkNPC, name: npc.get_GivenOrTypeName(), items, prices };
 }
 
+let nearbyAt = 0;
+let nearbyCache = [];
+
+// Town NPCs within reach of the player: [npcIndex, type, name, headIndex, distanceInTiles, hasShop]. Refreshed twice a second.
+function nearby(player) {
+    const now = Date.now();
+    if (now - nearbyAt < 500) {
+        return nearbyCache;
+    }
+    nearbyAt = now;
+    const result = [];
+    try {
+        const center = player.get_Center();
+        const list = Main.npc;
+        for (let index = 0; index < list.length; index++) {
+            const npc = list[index];
+            if (!npc || !npc.active || !npc.townNPC) {
+                continue;
+            }
+            const there = npc.get_Center();
+            const distance = Math.hypot(there.X - center.X, there.Y - center.Y) / 16;
+            if (distance <= 14) {
+                result.push([index, npc.type, String(npc.get_GivenOrTypeName()),
+                    new NativeClass("Terraria", "NPC").TypeToDefaultHeadIndex(npc.type), Math.round(distance),
+                    vendorTypes.indexOf(npc.type) > 0 || !!shopOption(npc)]);
+            }
+        }
+    } catch (_) { /* leave the list empty */ }
+    result.sort((a, b) => a[4] - b[4]);
+    nearbyCache = result.slice(0, 8);
+    return nearbyCache;
+}
+
 function canOpen(player) {
     const npc = vendor(player);
     return !!npc && (vendorTypes.indexOf(npc.type) > 0 || !!shopOption(npc));
@@ -144,4 +177,4 @@ function act(player, request) {
     game.refreshRecipes();
 }
 
-export { stock, canOpen, act };
+export { nearby, stock, canOpen, act };

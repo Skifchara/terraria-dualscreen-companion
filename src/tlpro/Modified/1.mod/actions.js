@@ -390,6 +390,21 @@ function actWithoutSound(player, request) {
         case "housing":
             housing(player, request);
             break;
+        case "say":
+            game.sendChat(request.text);
+            break;
+        case "emote":
+            game.sendEmote(player, request.id);
+            break;
+        case "talk": {
+            const index = request.npc;
+            const npc = Number.isInteger(index) && index >= 0 && index < Main.npc.length ? Main.npc[index] : null;
+            if (!npc || !npc.active || !npc.townNPC) {
+                throw new Error("Этого жителя нет рядом");
+            }
+            player.SetTalkNPC(index);
+            break;
+        }
         case "bannerclaim": {
             const banner = request.banner;
             const amount = request.amount;

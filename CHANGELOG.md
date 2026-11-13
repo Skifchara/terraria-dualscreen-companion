@@ -2,6 +2,12 @@
 
 ## Unreleased (quality of life)
 
+- Chat: the game's chat log and an on-screen keyboard (English / Russian, shift, slash commands) - the companion window is not
+  focusable, so there is no system keyboard. Opened with the new bubble button in the top bar.
+- Emotes: the game's emote bubbles as a panel (all 151, four pages); a tap shows the bubble over your character.
+- Nearby tab: when a town NPC is close, a **Nearby** tab slides in with Talk (starts the conversation, and so the shop) and, for the
+  Guide, a shortcut to the recipe lookup.
+- The UI atlas extractor now colors single-palette pages without an alpha plane (the emote sheet, ...).
 - Craft tab has three sub-tabs: **Recipes**, **Banners** (claim the banners you earned, one or all) and **Guide**.
 - Guide recipe lookup: pick any item (or press **Recipes** in the item window) to see every recipe that makes it and every recipe
   that uses it, with ingredients and stations - handy while talking to the Guide.

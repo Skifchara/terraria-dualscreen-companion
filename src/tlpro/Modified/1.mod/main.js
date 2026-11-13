@@ -145,6 +145,7 @@ function respond(player, request, error, mapState) {
     }
     state.pad = pad;
     state.shop = shop.stock(player);
+    state.nearby = shop.nearby(player);
     state.hud = Date.now() < hideUntil;
     state.hudAvailable = hudHooks.length !== 0;
     state.bgNow = sprites.currentBackgrounds(state.env);
@@ -240,6 +241,9 @@ function runRequest(player, request, now) {
             break;
         case "npc":
             send({ ...actions.npc(), canShop: shop.canOpen(player) });
+            break;
+        case "chatlog":
+            send({ chat: game.readChat() });
             break;
         case "recipesfor":
             send(game.recipesFor(player, request.type));

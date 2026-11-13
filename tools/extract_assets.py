@@ -110,6 +110,16 @@ def extract_db(tex, db):
                 image = compose(base, _Opaque, pal.image)
             elif alpha is not None and pal is not None:
                 image = compose(base, alpha, pal.image)
+            elif pal is not None and pal.m_Height == 1:
+                # a page with one palette row and no alpha plane (the emote sheet, ...): index 0 is transparent
+                index = alpha_of(base.image).convert("L")
+                flat = []
+                for r, g, b, _ in pal.image.convert("RGBA").getdata():
+                    flat += [r, g, b]
+                mask = index.point(lambda value: 0 if value == 0 else 255)
+                index.putpalette(flat)
+                image = index.convert("RGBA")
+                image.putalpha(mask)
             else:
                 image = base.image.convert("RGBA")
             image.save(os.path.join(OUT, "%s%d_%d.png" % (db, number, w)))

@@ -48,6 +48,15 @@ final class Strings {
         put("craft", "Craft", "Крафт", "Fabricación", "Wytwarzanie");
         put("map", "Map", "Карта", "Mapa", "Mapa");
         put("people", "People", "Люди", "Gente", "Ludzie");
+        put("chat_title", "Chat", "Чат", "Chat", "Czat");
+        put("emotes", "Emotes", "Эмоции", "Emotes", "Emotki");
+        put("chat_send", "Send", "Отправить", "Enviar", "Wyślij");
+        put("chat_empty", "No messages yet", "Сообщений пока нет", "Aún no hay mensajes", "Brak wiadomości");
+        put("chat_hint", "Type a message or a /command", "Введи сообщение или /команду", "Escribe un mensaje o un /comando", "Wpisz wiadomość lub /komendę");
+        put("nearby", "Nearby", "Рядом", "Cerca", "W pobliżu");
+        put("talk", "Talk", "Поговорить", "Hablar", "Rozmawiaj");
+        put("trades_here", "trades", "торгует", "comercia", "handluje");
+        put("tiles", "tiles", "кл.", "casillas", "pól");
         put("quick_stack", "Stack to chests", "В сундуки рядом", "Apilar en cofres", "Do skrzyń obok");
         put("filter_0", "All", "Все", "Todo", "Wszystko");
         put("filter_1", "Weapons", "Оружие", "Armas", "Broń");

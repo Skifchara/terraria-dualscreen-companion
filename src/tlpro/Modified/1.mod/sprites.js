@@ -14,7 +14,7 @@ const uiNames = new Set(["InventoryBack", "InventoryBack2", "InventoryBack3", "I
     "MapPing", "MapDeath", "ColorSlider", "ColorBar", "BuilderAcc", "BuilderTools", "QuicksIcon", "Trash"]);
 // Indexed arrays: name -> TextureAssets field
 const arrays = { item: "Item", background: "Background", moon: "Moon", cloud: "Cloud", star: "Star",
-    mapbg: "MapBGs", mapicon: "MapIcon", npchead: "NpcHead", bosshead: "NpcHeadBoss", playerhair: "PlayerHair", cursor: "Cursors", buff: "Buff",
+    mapbg: "MapBGs", mapicon: "MapIcon", extra: "Extra", npchead: "NpcHead", bosshead: "NpcHeadBoss", playerhair: "PlayerHair", cursor: "Cursors", buff: "Buff",
     craft: "CraftToggle", sort: "InventorySort", hotbarlock: "HbLock", coin: "Coin" };
 
 function encode(texture) {

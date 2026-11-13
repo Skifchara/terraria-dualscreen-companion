@@ -32,6 +32,48 @@ function setHousing(result) {
     lastHousing = Object.assign({ at: Date.now() }, result);
 }
 
+const EmoteBubbleClass = new NativeClass("Terraria.GameContent.UI", "EmoteBubble");
+const WorldUIAnchorClass = new NativeClass("Terraria.GameContent.UI", "WorldUIAnchor");
+const ChatHelperClass = new NativeClass("", "ChatHelper");
+const ChatMessageClass = new NativeClass("Terraria.Chat", "ChatMessage");
+
+// The game's chat log: [text, r, g, b, secondsLeft], newest first.
+function readChat() {
+    const result = [];
+    try {
+        const lines = Main.chatMonitor.chatLine;
+        for (let index = 0; index < lines.length && result.length < 40; index++) {
+            const line = lines[index];
+            if (line && line.originalText) {
+                const color = line.color;
+                result.push([String(line.originalText), color.R, color.G, color.B, line.showTime]);
+            }
+        }
+    } catch (_) { /* no chat log */ }
+    return result;
+}
+
+// Say something (or run a /command) exactly as if it had been typed into the game's chat.
+function sendChat(text) {
+    const value = String(text).trim();
+    if (!value || value.length > 250) {
+        throw new Error("Пустое сообщение");
+    }
+    const message = ChatMessageClass.new();
+    message["void .ctor(string message)"](value);
+    ChatHelperClass.SendChatMessageFromClient(message);
+}
+
+// An emote bubble above the player's head, from the game's own emote list.
+function sendEmote(player, id) {
+    if (!Number.isInteger(id) || id < 0 || id > 150) {
+        throw new Error("Неизвестная эмоция");
+    }
+    const anchor = WorldUIAnchorClass.new();
+    anchor["void .ctor(Entity anchor)"](player);
+    EmoteBubbleClass.NewBubble(id, anchor, 360);
+}
+
 // 0 other, 1 weapon, 2 tool, 3 armour / accessory, 4 potion / food, 5 block / material. Cached per type.
 const categories = new Map();
 
@@ -632,4 +674,4 @@ function backgrounds() {
     return result;
 }
 
-export { recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

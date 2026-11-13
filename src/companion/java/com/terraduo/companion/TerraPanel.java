@@ -70,6 +70,15 @@ final class TerraPanel extends View {
     // map
     private Bitmap mapBitmap;
     private MapCache mapCache;
+    // chat, emotes and the on-screen keyboard (the window is not focusable, so there is no system keyboard)
+    private boolean chatOpen;
+    private int chatMode;             // 0 chat, 1 emotes
+    private final StringBuilder chatInput = new StringBuilder();
+    private JSONArray chatLines;
+    private long lastChatAsk;
+    private boolean keyShift;
+    private int keyLayout;            // 0 English, 1 Russian
+    private int emotePage;
     // quality-of-life additions: inventory filter, craft sub-tabs, recipe browser
     private int inventoryFilter;      // 0 all, 1 weapons, 2 tools, 3 armor, 4 potions, 5 blocks
     private int craftTab;             // 0 recipes, 1 banners, 2 guide (item picker)
@@ -206,6 +215,10 @@ final class TerraPanel extends View {
             } else {
                 spriteTurn = !spriteTurn || sprites.backlog() > 40;
                 result = spriteTurn ? sprites.nextRequest() : null;
+                if (result == null && chatOpen && chatMode == 0 && now - lastChatAsk > 800) {
+                    lastChatAsk = now;
+                    result = op("chatlog");
+                }
                 if (result == null) {
                     // on the map tab the (slow) region sample is only asked for when it is due; in between the cheap state
                     // request keeps the player marker moving
@@ -271,6 +284,8 @@ final class TerraPanel extends View {
             scene.update(latest == null ? null : latest.optJSONObject("env"), backgrounds);
         } else if (response.has("entries")) {
             sprites.deliver(response);
+        } else if (response.has("chat") && !response.has("inventory")) {
+            chatLines = response.optJSONArray("chat");
         } else if (response.has("recipesFor")) {
             recipeView = response.optJSONObject("recipesFor");
             if (recipeView != null) {
@@ -403,13 +418,17 @@ final class TerraPanel extends View {
     private void updateInteraction() {
         JSONObject shop = shop();
         JSONObject chest = chest();
+        JSONArray near = latest == null ? null : latest.optJSONArray("nearby");
         String key = shop != null ? "shop/" + shop.optInt("id") + "/" + shop.optInt("talk")
-            : chest != null ? "chest/" + chest.optInt("id") : "";
+            : chest != null ? "chest/" + chest.optInt("id") : near != null && near.length() > 0 ? "near" : "";
         if (key.equals(interaction)) return;
         interaction = key;
         shopSelection = -1;
         if (key.isEmpty()) {
             if (pane == INTERACTION) openPane(0);
+        } else if (key.equals("near")) {
+            interactionTitle = "nearby";   // the tab only slides in; it does not take over the screen
+            if (pane == INTERACTION) scrollY = 0;
         } else {
             interactionTitle = shop != null ? "shop" : "chest";
             if (pane == INTERACTION) scrollY = 0;
@@ -625,6 +644,8 @@ final class TerraPanel extends View {
         drawEdges(canvas, w, h, s);
         if (latest == null) {
             drawCentered(canvas, Strings.get("open_world"), w / 2f, h / 2f, 34 * s, INK);
+        } else if (chatOpen) {
+            drawChat(canvas, w, h, s);
         } else if (recipeViewOpen) {
             drawRecipeView(canvas, w, h, s);
         } else if (sheetOpen) {
@@ -898,6 +919,7 @@ final class TerraPanel extends View {
         float bx = w - 30 * s;
         bx = button(canvas, "lang", Strings.language().code.toUpperCase(java.util.Locale.ROOT),
             bx - 88 * s, 20 * s, 88 * s, 52 * s, 0xff2a3a6a, s);
+        button(canvas, "chat", "", bx - 200 * s - 12 * s - 64 * s, 20 * s, 64 * s, 52 * s, chatOpen ? 0xff347461 : 0xff2a3a6a, s);
         boolean can = latest != null && latest.optBoolean("hudAvailable");
         button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 200 * s, 20 * s, 200 * s, 52 * s,
             can ? (hideRequested ? 0xff347461 : 0xff2a3a6a) : 0xff1a2238, s);
@@ -1026,6 +1048,7 @@ final class TerraPanel extends View {
         if (name.startsWith("house_check")) return "magnifier";
         if (name.startsWith("house_move")) return "house";
         if (name.equals("ctab_1") || name.startsWith("banner_")) return "flag";
+        if (name.equals("chat")) return "bubble";
         switch (name) {
             case "sheet_favorite": return "star";
             case "sheet_drop": return "arrowup";
@@ -1085,6 +1108,14 @@ final class TerraPanel extends View {
                 canvas.drawPath(symbolPath, fill);
                 break;
             }
+            case "bubble":
+                canvas.drawRoundRect(cx - r, cy - r * 0.8f, cx + r, cy + r * 0.4f, r * 0.3f, r * 0.3f, fill);
+                symbolPath.moveTo(cx - r * 0.5f, cy + r * 0.3f);
+                symbolPath.lineTo(cx - r * 0.7f, cy + r * 0.95f);
+                symbolPath.lineTo(cx, cy + r * 0.3f);
+                symbolPath.close();
+                canvas.drawPath(symbolPath, fill);
+                break;
             case "split":
                 canvas.drawRect(cx - r, cy - r * 0.5f, cx - r * 0.1f, cy + r * 0.5f, fill);
                 canvas.drawRect(cx + r * 0.1f, cy - r * 0.5f, cx + r, cy + r * 0.5f, fill);
@@ -1122,7 +1153,8 @@ final class TerraPanel extends View {
 
     private void drawPaneBody(Canvas canvas, int which, int w, float s, float top, float bottom) {
         if (latest == null && which != 3) return;
-        if (which == 0 || which == INTERACTION) drawInventory(canvas, w, s, top, which == INTERACTION);
+        if (which == INTERACTION && interactionTitle.equals("nearby")) drawNearby(canvas, w, s, top);
+        else if (which == 0 || which == INTERACTION) drawInventory(canvas, w, s, top, which == INTERACTION);
         else if (which == 1) drawEquipment(canvas, w, s, top);
         else if (which == 2) drawCraft(canvas, w, s, top, bottom);
         else if (which == 3) drawMap(canvas, w, s, top, bottom);
@@ -1453,6 +1485,212 @@ final class TerraPanel extends View {
         if (craftTab == 1) drawBanners(canvas, w, s, top + 64 * s, bottom);
         else if (craftTab == 2) drawGuidePicker(canvas, w, s, top + 64 * s);
         else drawCraftRecipes(canvas, w, s, top + 64 * s, bottom);
+    }
+
+    // ---- nearby NPCs: the Guide's recipes and a way to start a conversation (and so a trade) with anyone close by
+
+    private void drawNearby(Canvas canvas, int w, float s, float top) {
+        JSONArray near = latest == null ? null : latest.optJSONArray("nearby");
+        float y = top + 12 * s;
+        for (int index = 0; near != null && index < near.length(); index++) {
+            JSONArray npc = near.optJSONArray(index);
+            if (npc == null) continue;
+            panel(canvas, 30 * s, y, w - 30 * s, y + 96 * s, 0x99101a38, 0xff5a6ea8, s);
+            Bitmap head = npc.optInt(3) >= 0 ? sprites.get("npchead:" + npc.optInt(3)) : null;
+            if (head != null) {
+                float fit = Math.min(64 * s / head.getWidth(), 64 * s / head.getHeight());
+                drawSprite(canvas, head, 50 * s, y + 48 * s - head.getHeight() * fit / 2, head.getWidth() * fit, head.getHeight() * fit);
+            }
+            drawText(canvas, npc.optString(2), 130 * s, y + 14 * s, 32 * s, INK, true);
+            String line = npc.optInt(4) + " " + Strings.get("tiles") + (npc.optBoolean(5) ? "  ·  " + Strings.get("trades_here") : "");
+            drawText(canvas, line, 130 * s, y + 54 * s, 24 * s, MUTED, true);
+            float bx = w - 50 * s - 210 * s;
+            button(canvas, "near_talk_" + npc.optInt(0), Strings.get("talk"), bx, y + 22 * s, 210 * s, 52 * s, 0xff347461, s);
+            if (npc.optInt(1) == 22) {
+                button(canvas, "near_recipes", Strings.get("recipes_btn"), bx - 230 * s, y + 22 * s, 210 * s, 52 * s, 0xff2a3a6a, s);
+            }
+            y += 108 * s;
+        }
+        neededHeight = Math.max(neededHeight, y - top + scrollY + 20 * s);
+    }
+
+    // ---- chat with the on-screen keyboard, and the game's emote bubbles
+
+    private static final String[][] KEYS = {
+        {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"},
+        {"1234567890", "йцукенгшщзхъ", "фывапролджэ", "ячсмитьбю"}};
+
+    private static String cleanChat(String text) {
+        return text.replaceAll("\\[c/[0-9a-fA-F]{1,8}:([^\\]]*)\\]", "$1").replaceAll("\\[[a-z]+(/[^:\\]]*)?:[^\\]]*\\]", "");
+    }
+
+    private void chatButton(String name) {
+        if (name.startsWith("emote_")) {
+            if (name.equals("emote_prev")) emotePage = Math.max(0, emotePage - 1);
+            else if (name.equals("emote_next")) emotePage = Math.min(3, emotePage + 1);
+            else {
+                JSONObject command = op("act");
+                TlProPanel.put(command, "kind", "emote");
+                TlProPanel.put(command, "id", Integer.parseInt(name.substring(6)));
+                send.accept(command);
+            }
+            return;
+        }
+        if (name.startsWith("key_")) {
+            String key = name.substring(4);
+            switch (key) {
+                case "back": if (chatInput.length() > 0) chatInput.setLength(chatInput.length() - 1); break;
+                case "space": if (chatInput.length() < 240) chatInput.append(' '); break;
+                case "shift": keyShift = !keyShift; break;
+                case "lang": keyLayout = 1 - keyLayout; break;
+                case "send": sendChatInput(); break;
+                default:
+                    if (chatInput.length() < 240) {
+                        chatInput.append(keyShift ? key.toUpperCase() : key);
+                        keyShift = false;
+                    }
+                    break;
+            }
+            return;
+        }
+        switch (name) {
+            case "chat_close": chatOpen = false; sound("close"); break;
+            case "chat_mode_0": chatMode = 0; break;
+            case "chat_mode_1": chatMode = 1; break;
+            default: break;
+        }
+    }
+
+    private void sendChatInput() {
+        String text = chatInput.toString().trim();
+        if (text.isEmpty()) return;
+        JSONObject command = op("act");
+        TlProPanel.put(command, "kind", "say");
+        TlProPanel.put(command, "text", text);
+        send.accept(command);
+        chatInput.setLength(0);
+        lastChatAsk = 0;
+    }
+
+    private void drawChat(Canvas canvas, int w, int h, float s) {
+        hits.clear();
+        fill.setColor(0xcc02060f);
+        canvas.drawRect(0, 0, w, h, fill);
+        Hit outside = new Hit();
+        outside.type = 8;
+        outside.rect.set(0, 0, w, h);
+        hits.add(outside);
+        float left = 16 * s;
+        float right = w - 16 * s;
+        float top = 14 * s;
+        float bottom = h - 14 * s;
+        panel(canvas, left, top, right, bottom, 0xf0101a38, 0xff8ea2d8, s);
+        float tabW = 220 * s;
+        button(canvas, "chat_mode_0", Strings.get("chat_title"), left + 20 * s, top + 14 * s, tabW, 54 * s, chatMode == 0 ? 0xff347461 : 0xff2a3a6a, s);
+        button(canvas, "chat_mode_1", Strings.get("emotes"), left + 36 * s + tabW, top + 14 * s, tabW, 54 * s, chatMode == 1 ? 0xff347461 : 0xff2a3a6a, s);
+        button(canvas, "chat_close", "x", right - 96 * s, top + 14 * s, 76 * s, 54 * s, 0xff7a2a2f, s);
+        if (chatMode == 1) {
+            drawEmotes(canvas, w, s, top + 84 * s, bottom - 12 * s);
+            return;
+        }
+        float keyboardH = 5 * 74 * s;
+        float inputTop = bottom - keyboardH - 72 * s - 12 * s;
+        float listTop = top + 84 * s;
+        // messages, newest at the bottom
+        canvas.save();
+        canvas.clipRect(left + 10 * s, listTop, right - 10 * s, inputTop - 6 * s);
+        float y = inputTop - 14 * s;
+        boolean any = false;
+        for (int index = 0; chatLines != null && index < chatLines.length() && y > listTop; index++) {
+            JSONArray line = chatLines.optJSONArray(index);
+            if (line == null) continue;
+            any = true;
+            java.util.ArrayList<String> parts = wrap(cleanChat(line.optString(0)), right - left - 60 * s, 26 * s);
+            int color = 0xff000000 | (line.optInt(1) << 16) | (line.optInt(2) << 8) | line.optInt(3);
+            for (int part = parts.size() - 1; part >= 0; part--) {
+                y -= 34 * s;
+                drawText(canvas, parts.get(part), left + 30 * s, y, 26 * s, color, true);
+            }
+            y -= 6 * s;
+        }
+        if (!any) drawText(canvas, Strings.get("chat_empty"), left + 30 * s, listTop + 10 * s, 28 * s, MUTED, true);
+        canvas.restore();
+        // the text being typed
+        panel(canvas, left + 16 * s, inputTop, right - 16 * s, inputTop + 64 * s, 0xcc060b1a, 0xff5a6ea8, s);
+        String shown = chatInput.length() == 0 ? Strings.get("chat_hint") : chatInput.toString();
+        boolean cursor = (SystemClock.uptimeMillis() / 500) % 2 == 0;
+        float textSize = fitText(shown + (cursor ? "|" : ""), 32 * s, right - left - 100 * s);
+        drawText(canvas, chatInput.length() == 0 ? shown : shown + (cursor ? "|" : ""), left + 40 * s, inputTop + 16 * s, textSize,
+            chatInput.length() == 0 ? MUTED : INK, true);
+        // keyboard
+        float ky = inputTop + 72 * s;
+        float keyGap = 6 * s;
+        String[] rows = KEYS[keyLayout];
+        for (int row = 0; row < rows.length; row++) {
+            String letters = rows[row];
+            float kw = Math.min(100 * s, (right - left - 32 * s - (letters.length() - 1) * keyGap) / letters.length());
+            float rowWidth = letters.length() * kw + (letters.length() - 1) * keyGap;
+            float kx = (w - rowWidth) / 2;
+            for (int index = 0; index < letters.length(); index++) {
+                String key = String.valueOf(letters.charAt(index));
+                String label = keyShift ? key.toUpperCase() : key;
+                button(canvas, "key_" + key, label, kx + index * (kw + keyGap), ky, kw, 68 * s, 0xff2a3a6a, s);
+            }
+            ky += 74 * s;
+        }
+        float unit = (right - left - 32 * s - 5 * keyGap) / 11;
+        float kx = left + 16 * s;
+        button(canvas, "key_shift", "Aa", kx, ky, unit * 1.5f, 68 * s, keyShift ? 0xff347461 : 0xff2a3a6a, s);
+        kx += unit * 1.5f + keyGap;
+        button(canvas, "key_lang", keyLayout == 0 ? "EN" : "RU", kx, ky, unit * 1.5f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 1.5f + keyGap;
+        String[] extra = {"/", ".", ",", "!", "?"};
+        for (String symbol : extra) {
+            button(canvas, "key_" + symbol, symbol, kx, ky, unit * 0.9f, 68 * s, 0xff2a3a6a, s);
+            kx += unit * 0.9f + keyGap;
+        }
+        button(canvas, "key_space", "", kx, ky, unit * 2.6f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 2.6f + keyGap;
+        button(canvas, "key_back", "<-", kx, ky, unit * 1.2f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 1.2f + keyGap;
+        button(canvas, "key_send", Strings.get("chat_send"), kx, ky, right - 16 * s - kx, 68 * s, 0xff347461, s);
+    }
+
+    private void drawEmotes(Canvas canvas, int w, float s, float top, float bottom) {
+        Bitmap sheet = sprites.get("extra:48");
+        if (sheet == null) {
+            drawCentered(canvas, "…", w / 2f, (top + bottom) / 2, 40 * s, MUTED);
+            return;
+        }
+        int frameW = sheet.getWidth() / 8;
+        int frameH = sheet.getHeight() / 39;
+        int columns = 8;
+        float cell = (w - 80 * s) / columns;
+        float cellH = cell * frameH / frameW;
+        int perPage = 40;
+        for (int slot = 0; slot < perPage; slot++) {
+            int id = emotePage * perPage + slot;
+            if (id >= 151) break;
+            float x = 40 * s + (slot % columns) * cell;
+            float y = top + (slot / columns) * (cellH + 8 * s);
+            // the white bubble, then the emote on top of it
+            srcRect.set(frameW, 0, frameW * 2, frameH);
+            dstRect.set(x + 6 * s, y, x + cell - 6 * s, y + cellH);
+            canvas.drawBitmap(sheet, srcRect, dstRect, pixels);
+            int col = (id % 4) * 2 + 1;
+            int row = 1 + id / 4;
+            srcRect.set(col * frameW, row * frameH, (col + 1) * frameW, (row + 1) * frameH);
+            canvas.drawBitmap(sheet, srcRect, dstRect, pixels);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "emote_" + id;
+            hit.rect.set(x, y, x + cell, y + cellH);
+            hits.add(hit);
+        }
+        float by = bottom - 62 * s;
+        button(canvas, "emote_prev", "‹", 40 * s, by, 100 * s, 54 * s, emotePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+        drawCentered(canvas, (emotePage + 1) + " / 4", w / 2f, by + 27 * s, 30 * s, INK);
+        button(canvas, "emote_next", "›", w - 140 * s, by, 100 * s, 54 * s, emotePage < 3 ? 0xff2a3a6a : 0xff1a2238, s);
     }
 
     private void drawBanners(Canvas canvas, int w, float s, float top, float bottom) {
@@ -2592,6 +2830,28 @@ final class TerraPanel extends View {
         if (!name.startsWith("sheet_") && !name.startsWith("chest_")) sound("tick");
         if (name.startsWith("sheet_")) {
             sheetAction(name.substring(6));
+            return;
+        }
+        if (name.equals("chat")) {
+            chatOpen = !chatOpen;
+            chatLines = null;
+            lastChatAsk = 0;
+            return;
+        }
+        if (name.startsWith("chat_") || name.startsWith("key_") || name.startsWith("emote_")) {
+            chatButton(name);
+            return;
+        }
+        if (name.startsWith("near_")) {
+            if (name.equals("near_recipes")) {
+                craftTab = 2;
+                openPane(2);
+                return;
+            }
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "talk");
+            TlProPanel.put(command, "npc", Integer.parseInt(name.substring(name.lastIndexOf('_') + 1)));
+            send.accept(command);
             return;
         }
         if (name.startsWith("filter_")) {
