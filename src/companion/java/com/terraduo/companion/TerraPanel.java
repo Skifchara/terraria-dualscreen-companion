@@ -2526,14 +2526,21 @@ final class TerraPanel extends View {
         float targetX = selected < 0 ? -1 : x0 + selected * (size + 6 * s);
         if (highlightX < 0 || targetX < 0) highlightX = targetX;
         else highlightX += (targetX - highlightX) * 0.35f;
+        // Like the game's hotbar: the chosen slot grows to full size on the golden selection plate, the others stay smaller.
         for (int index = 0; index < 10; index++) {
-            drawSlotAt(canvas, x0 + index * (size + 6 * s), y, size, 0, index, Integer.toString(index == 9 ? 0 : index + 1));
+            float goal = index == selected ? 1f : 0.86f;
+            hotbarScale[index] += (goal - hotbarScale[index]) * 0.3f;
+            float cell = size * hotbarScale[index];
+            float cx = x0 + index * (size + 6 * s);
+            backOverride = index == selected ? "ui:InventoryBack14" : null;
+            drawSlotAt(canvas, cx + (size - cell) / 2, y + (size - cell) / 2 + (index == selected ? 0 : size * 0.02f), cell, 0, index,
+                Integer.toString(index == 9 ? 0 : index + 1));
+            backOverride = null;
+            // the touch target stays the full cell
+            if (!hits.isEmpty()) hits.get(hits.size() - 1).rect.set(cx - 3 * s, y - 6 * s, cx + size + 3 * s, y + size + 6 * s);
         }
         if (highlightX >= 0) {
             float pulse = 0.5f + 0.5f * (float) Math.sin(now / 260.0);
-            stroke.setColor(GOLD);
-            stroke.setStrokeWidth(5 * s);
-            canvas.drawRect(highlightX - 4 * s, y - 4 * s, highlightX + size + 4 * s, y + size + 4 * s, stroke);
             if (overrideSlot >= 0 && overrideSlot != selected && overrideSlot < 10) {
                 stroke.setColor(((int) (120 + 120 * pulse) << 24) | 0xffffff);
                 stroke.setStrokeWidth(3 * s);
@@ -2542,6 +2549,9 @@ final class TerraPanel extends View {
             }
         }
     }
+
+    private final float[] hotbarScale = {0.86f, 0.86f, 0.86f, 0.86f, 0.86f, 0.86f, 0.86f, 0.86f, 0.86f, 0.86f};
+    private String backOverride;
 
     private String slotBack(int group, int index) {
         if (group == 1) return index < 10 ? "ui:InventoryBack3" : "ui:InventoryBack8";
@@ -2560,7 +2570,7 @@ final class TerraPanel extends View {
         boolean locked = group == 1 && latest != null && latest.optJSONArray("unlocked") != null
             && !latest.optJSONArray("unlocked").optBoolean(index % 10, true);
         boolean favoured = data != null && typeOf(data) != 0 && data.optBoolean(3);
-        Bitmap back = sprites.get(favoured ? "ui:InventoryBack10" : slotBack(group, index));
+        Bitmap back = sprites.get(backOverride != null ? backOverride : favoured ? "ui:InventoryBack10" : slotBack(group, index));
         if (back != null) drawSprite(canvas, back, x, y, size, size);
         else panel(canvas, x, y, x + size, y + size, 0xcc243a73, 0xff6a80c0, s);
         if (locked) {
