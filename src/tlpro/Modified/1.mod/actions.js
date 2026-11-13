@@ -391,7 +391,7 @@ function actWithoutSound(player, request) {
             housing(player, request);
             break;
         case "say":
-            game.sendChat(request.text);
+            game.sendChat(player, request.text);
             break;
         case "emote":
             game.sendEmote(player, request.id);

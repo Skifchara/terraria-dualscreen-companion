@@ -32,36 +32,66 @@ function setHousing(result) {
     lastHousing = Object.assign({ at: Date.now() }, result);
 }
 
-const EmoteBubbleClass = new NativeClass("Terraria.GameContent.UI", "EmoteBubble");
-const WorldUIAnchorClass = new NativeClass("Terraria.GameContent.UI", "WorldUIAnchor");
-const ChatHelperClass = new NativeClass("", "ChatHelper");
-const ChatMessageClass = new NativeClass("Terraria.Chat", "ChatMessage");
+// Resolved on first use so a missing class can never stop the whole mod from loading.
+const lazyClasses = new Map();
 
-// The game's chat log: [text, r, g, b, secondsLeft], newest first.
+function lazyClass(namespace, name) {
+    const key = namespace + "." + name;
+    if (!lazyClasses.has(key)) {
+        lazyClasses.set(key, new NativeClass(namespace, name));
+    }
+    return lazyClasses.get(key);
+}
+
+// The game's chat log: [text, r, g, b, secondsLeft], newest first. The phone build keeps it in a ChatLine array, the PC style
+// monitor in a list of containers; whichever the game runs is read.
 function readChat() {
     const result = [];
+    const monitor = Main.chatMonitor;
     try {
-        const lines = Main.chatMonitor.chatLine;
-        for (let index = 0; index < lines.length && result.length < 40; index++) {
-            const line = lines[index];
-            if (line && line.originalText) {
-                const color = line.color;
-                result.push([String(line.originalText), color.R, color.G, color.B, line.showTime]);
+        const lines = monitor.chatLine;
+        if (lines) {
+            for (let index = 0; index < lines.length && result.length < 40; index++) {
+                const line = lines[index];
+                if (line && line.originalText) {
+                    const color = line.color;
+                    result.push([String(line.originalText), color.R, color.G, color.B, line.showTime]);
+                }
             }
+            return result;
+        }
+    } catch (_) { /* not the phone monitor */ }
+    try {
+        const messages = monitor._messages;
+        const count = messages.get_Count();
+        for (let index = count - 1; index >= 0 && result.length < 40; index--) {
+            const message = messages.get_Item(index);
+            const color = message._color;
+            result.push([String(message.OriginalText), color.R, color.G, color.B, message._timeLeft]);
         }
     } catch (_) { /* no chat log */ }
     return result;
 }
 
 // Say something (or run a /command) exactly as if it had been typed into the game's chat.
-function sendChat(text) {
+function sendChat(player, text) {
     const value = String(text).trim();
     if (!value || value.length > 250) {
         throw new Error("Пустое сообщение");
     }
-    const message = ChatMessageClass.new();
+    if (Main.netMode === 0) {
+        // Single player has no server to bounce the message off: handle commands locally, show plain text as the game does.
+        if (value.startsWith("/")) {
+            const commands = lazyClass("Terraria.Chat", "ChatManager").Commands;
+            commands.ProcessIncomingMessage(commands.CreateOutgoingMessage(value), player.whoAmI);
+        } else {
+            Main["void NewText(string newText, byte R, byte G, byte B, bool onlyCurrentPlayer)"]("<" + player.name + "> " + value, 255, 255, 255, false);
+        }
+        return;
+    }
+    const message = lazyClass("Terraria.Chat", "ChatMessage").new();
     message["void .ctor(string message)"](value);
-    ChatHelperClass.SendChatMessageFromClient(message);
+    lazyClass("Terraria.Chat", "ChatHelper").SendChatMessageFromClient(message);
 }
 
 // An emote bubble above the player's head, from the game's own emote list.
@@ -69,9 +99,9 @@ function sendEmote(player, id) {
     if (!Number.isInteger(id) || id < 0 || id > 150) {
         throw new Error("Неизвестная эмоция");
     }
-    const anchor = WorldUIAnchorClass.new();
+    const anchor = lazyClass("Terraria.GameContent.UI", "WorldUIAnchor").new();
     anchor["void .ctor(Entity anchor)"](player);
-    EmoteBubbleClass.NewBubble(id, anchor, 360);
+    lazyClass("Terraria.GameContent.UI", "EmoteBubble").NewBubble(id, anchor, 360);
 }
 
 // 0 other, 1 weapon, 2 tool, 3 armour / accessory, 4 potion / food, 5 block / material. Cached per type.
