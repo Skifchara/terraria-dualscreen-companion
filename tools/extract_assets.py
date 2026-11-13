@@ -166,7 +166,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--apk")
     ap.add_argument("--push", action="store_true")
-    ap.add_argument("--dbs", default="Item,UI,Misc,Extra,Buff,Cursor,MiniMap,MapBG,Moon,Star,Sun,Gem,Coin")
+    ap.add_argument("--dbs", default="Item,UI,Misc,Extra,Buff,Cursor,MiniMap,MapBG,Moon,Star,Sun,Gem,Coin,NPC")
     args = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
     apk = args.apk or pull_apk()

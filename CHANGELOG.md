@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (quality of life)
+## 1.0.6 (quality of life, pre-release)
 
 - Chat: the game's chat log and an on-screen keyboard (English / Russian, shift, slash commands) - the companion window is not
   focusable, so there is no system keyboard. Opened with the new bubble button in the top bar.
