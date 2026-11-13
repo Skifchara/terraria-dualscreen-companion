@@ -24,6 +24,8 @@ let hideMap = false;
 let mirrorChest = -1;
 let mirrorShop = 0;
 let mirroredWasOpen = false;
+let paused = false;            // the companion froze the game; released when it stops polling
+let lastPoll = 0;
 let inventoryShutUntil = 0;   // after a mirrored chest / shop closes the game may flag its inventory open for a few frames
 const hudHooks = [];
 
@@ -148,6 +150,7 @@ function respond(player, request, error, mapState) {
     state.nearby = shop.nearby(player);
     state.hud = Date.now() < hideUntil;
     state.hudAvailable = hudHooks.length !== 0;
+    state.paused = paused;
     state.bgNow = sprites.currentBackgrounds(state.env);
     if (mapState) {
         state.map = mapState;
@@ -160,6 +163,7 @@ function respond(player, request, error, mapState) {
 
 function runRequest(player, request, now) {
     connection.request = request;
+    lastPoll = now;
     if (!request.legacy) {
         hideUntil = request.hide === true ? now + 1700 : 0;
         hideMap = request.hide === true;
@@ -241,6 +245,19 @@ function runRequest(player, request, now) {
             break;
         case "npc":
             send({ ...actions.npc(), canShop: shop.canOpen(player) });
+            break;
+        case "bestiaryinfo":
+            send(game.bestiaryInfo(request.id));
+            break;
+        case "pause":
+            paused = request.on === true;
+            respond(player, request);
+            break;
+        case "maptile":
+            send({ maptile: map.tileInfo(request) });
+            break;
+        case "bestiary":
+            send({ bestiary: game.readBestiary(), pending: game.bestiaryPendingCount() });
             break;
         case "chatlog":
             send({ chat: game.readChat() });
@@ -492,7 +509,12 @@ Main.DoUpdate.hook((original, self, gameTime) => {
     } catch (_) { /* not in a world */ }
     noteY();
     holdInventoryShut();
-    original(self, gameTime);
+    if (paused && (Date.now() - lastPoll > 4000 || Main.gameMenu || Main.netMode !== 0)) {
+        paused = false;
+    }
+    if (!paused) {
+        original(self, gameTime);
+    }
     finishMirroredInteraction();
     try {
         game.applyHidden(Main.get_LocalPlayer());

@@ -1,5 +1,6 @@
 const Main = new NativeClass("Terraria", "Main");
 const MapHelper = new NativeClass("Terraria.Map", "MapHelper");
+const Lang = new NativeClass("Terraria", "Lang");
 const colors = new Map();
 const perTick = 640;
 
@@ -48,4 +49,23 @@ function sample(job) {
     return result.pixels.length === total;
 }
 
-export { start, sample };
+// What the map shows at one world tile (only tiles the player has already uncovered): the game's own map object name.
+function tileInfo(request) {
+    const world = Main.get_Map();
+    const x = request.x;
+    const y = request.y;
+    if (!world || !Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= world.MaxWidth || y >= world.MaxHeight) {
+        throw new Error("Неверная точка карты");
+    }
+    if (!world.IsRevealed(x, y)) {
+        return { x, y, revealed: false, name: "" };
+    }
+    const type = MapHelper.CreateMapTile(x, y, 255).Type;
+    let name = "";
+    try {
+        name = String(Lang.GetMapObjectName(type));
+    } catch (_) { /* no name for this tile */ }
+    return { x, y, revealed: true, type, name };
+}
+
+export { start, sample, tileInfo };

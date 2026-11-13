@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.LightingColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
@@ -76,6 +77,24 @@ final class TerraPanel extends View {
     private final StringBuilder chatInput = new StringBuilder();
     private JSONArray chatLines;
     private long lastChatAsk;
+    private int peopleTab;               // 0 team / town, 1 bestiary
+    private int bestiaryFilter;
+    private JSONArray bestiaryList;
+    private long lastBestiaryAsk;
+    private boolean bestiaryFoundOnly;
+    private int bestiaryPending;
+    private int bestiaryBiome = -1;
+    private java.util.ArrayList<String> bestiaryTags;
+    private final Paint backdrop = new Paint();
+    private int bstOpenId = -1;
+    private boolean bstWanted;
+    private JSONObject bstInfo;
+    private String mapTip = "";
+    private long mapTipUntil;
+    private float mapTipX, mapTipY;
+    private final Runnable mapHold = () -> fireMapHold();
+
+    private final Paint silhouette = new Paint();
     private boolean keyShift;
     private int keyLayout;            // 0 English, 1 Russian
     private int emotePage;
@@ -206,6 +225,10 @@ final class TerraPanel extends View {
             } else if (latest != null && backgrounds == null && !backgroundsRequested) {
                 backgroundsRequested = true;
                 result = op("backgrounds");
+            } else if (bstOpenId >= 0 && bstWanted) {
+                bstWanted = false;
+                result = op("bestiaryinfo");
+                TlProPanel.put(result, "id", bstOpenId);
             } else if (sheetOpen && sheetInfo == null && infoWanted) {
                 infoWanted = false;
                 result = op("info");
@@ -216,6 +239,10 @@ final class TerraPanel extends View {
             } else {
                 spriteTurn = !spriteTurn || sprites.backlog() > 40;
                 result = spriteTurn ? sprites.nextRequest() : null;
+                if (result == null && pane == 4 && peopleTab == 1 && now - lastBestiaryAsk > (bestiaryList == null || bestiaryPending > 0 ? 700 : 6000)) {
+                    lastBestiaryAsk = now;
+                    result = op("bestiary");
+                }
                 if (result == null && chatOpen && chatMode == 0 && now - lastChatAsk > 800) {
                     lastChatAsk = now;
                     result = op("chatlog");
@@ -285,6 +312,25 @@ final class TerraPanel extends View {
             scene.update(latest == null ? null : latest.optJSONObject("env"), backgrounds);
         } else if (response.has("entries")) {
             sprites.deliver(response);
+        } else if (response.has("bestiaryinfo") && !response.has("inventory")) {
+            JSONObject info = response.optJSONObject("bestiaryinfo");
+            if (info != null && info.optInt("id") == bstOpenId) {
+                bstInfo = info;
+                JSONArray drops = info.optJSONArray("drops");
+                for (int index = 0; drops != null && index < drops.length() && index < 24; index++) {
+                    JSONArray drop = drops.optJSONArray(index);
+                    if (drop != null) sprites.warm("item:" + drop.optInt(0));
+                }
+            }
+        } else if (response.has("maptile") && !response.has("inventory")) {
+            JSONObject tile = response.optJSONObject("maptile");
+            String name = tile == null ? "" : tile.optString("name");
+            mapTip = name.isEmpty() ? Strings.get(tile != null && tile.optBoolean("revealed") ? "map_unknown_block" : "map_unexplored") : name;
+            mapTipUntil = SystemClock.uptimeMillis() + 2600;
+        } else if (response.has("bestiary") && !response.has("inventory")) {
+            bestiaryList = response.optJSONArray("bestiary");
+            bestiaryPending = response.optInt("pending");
+            bestiaryTags = null;
         } else if (response.has("chat") && !response.has("inventory")) {
             chatLines = response.optJSONArray("chat");
         } else if (response.has("recipesFor")) {
@@ -650,6 +696,8 @@ final class TerraPanel extends View {
             drawChat(canvas, w, h, s);
         } else if (recipeViewOpen) {
             drawRecipeView(canvas, w, h, s);
+        } else if (bstOpenId >= 0) {
+            drawBestiaryDetail(canvas, w, h, s);
         } else if (sheetOpen) {
             drawSheet(canvas, w, h, s);
         } else if (talking() && shop() == null && chest() == null) {
@@ -911,7 +959,7 @@ final class TerraPanel extends View {
         }
         String info = infoLine();
         if (!info.isEmpty()) {
-            float width = Math.max(24 * s, w - 980 * s);
+            float width = Math.max(24 * s, w - 1085 * s);
             infoText.setTextSize(24 * s);
             String preview = android.text.TextUtils.ellipsize(info, infoText, width - 21 * s,
                 android.text.TextUtils.TruncateAt.END).toString();
@@ -921,6 +969,9 @@ final class TerraPanel extends View {
         float bx = w - 30 * s;
         bx = button(canvas, "lang", Strings.language().code.toUpperCase(java.util.Locale.ROOT),
             bx - 100 * s, 12 * s, 100 * s, 66 * s, 0xff2a3a6a, s);
+        boolean paused = latest != null && latest.optBoolean("paused");
+        button(canvas, "pause", "", bx - 210 * s - 12 * s - 84 * s - 12 * s - 84 * s, 12 * s, 84 * s, 66 * s,
+            paused ? 0xff8a6a1f : 0xff2a3a6a, s);
         button(canvas, "chat", "", bx - 210 * s - 12 * s - 84 * s, 12 * s, 84 * s, 66 * s, chatOpen ? 0xff347461 : 0xff2a3a6a, s);
         boolean can = latest != null && latest.optBoolean("hudAvailable");
         button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 210 * s, 12 * s, 210 * s, 66 * s,
@@ -1022,6 +1073,10 @@ final class TerraPanel extends View {
             case "craft": return "item:36";
             case "map": case "center": return "item:393";
             case "people": return "npchead:1";
+            case "bf_1": return "item:4";
+            case "bf_2": return "item:43";
+            case "bf_3": return "item:1991";
+            case "bf_4": return "npchead:1";
             case "shop": case "shop_open": case "shop_buy": case "sheet_sell": return "item:72";
             case "hud": return "ui:Heart";
             case "lang": return "item:149";
@@ -1051,6 +1106,8 @@ final class TerraPanel extends View {
         if (name.startsWith("house_move")) return "house";
         if (name.equals("ctab_1") || name.startsWith("banner_")) return "flag";
         if (name.equals("chat")) return "bubble";
+        if (name.equals("pause")) return latest != null && latest.optBoolean("paused") ? "play" : "pause";
+        if (name.equals("bf_5")) return "star";
         switch (name) {
             case "sheet_favorite": return "star";
             case "sheet_drop": return "arrowup";
@@ -1110,6 +1167,17 @@ final class TerraPanel extends View {
                 canvas.drawPath(symbolPath, fill);
                 break;
             }
+            case "pause":
+                canvas.drawRect(cx - r * 0.7f, cy - r * 0.8f, cx - r * 0.15f, cy + r * 0.8f, fill);
+                canvas.drawRect(cx + r * 0.15f, cy - r * 0.8f, cx + r * 0.7f, cy + r * 0.8f, fill);
+                break;
+            case "play":
+                symbolPath.moveTo(cx - r * 0.55f, cy - r * 0.85f);
+                symbolPath.lineTo(cx + r * 0.8f, cy);
+                symbolPath.lineTo(cx - r * 0.55f, cy + r * 0.85f);
+                symbolPath.close();
+                canvas.drawPath(symbolPath, fill);
+                break;
             case "bubble":
                 canvas.drawRoundRect(cx - r, cy - r * 0.8f, cx + r, cy + r * 0.4f, r * 0.3f, r * 0.3f, fill);
                 symbolPath.moveTo(cx - r * 0.5f, cy + r * 0.3f);
@@ -1458,7 +1526,299 @@ final class TerraPanel extends View {
     private static final int[] TEAM_COLORS = {0xff5a6578, 0xffd04848, 0xff3fa653, 0xff4a6ed8, 0xffd8c040, 0xffd868b8};
 
     /** The game's housing / players / team page: team and PvP, town NPCs with their homes, other players. */
+    private void fireMapHold() {
+        if (pane != 3 || dragging || scrolling || mapBitmap == null) return;
+        float cx = (mapPort.left + mapPort.right) / 2;
+        float cy = (mapPort.top + mapPort.bottom) / 2;
+        int tileX = Math.round(viewCx + (downX - cx) / viewScale);
+        int tileY = Math.round(viewCy + (downY - cy) / viewScale);
+        mapTipX = downX;
+        mapTipY = downY;
+        JSONObject command = op("maptile");
+        TlProPanel.put(command, "x", tileX);
+        TlProPanel.put(command, "y", tileY);
+        send.accept(command);
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+    }
+
+    /** People page: a switch between the team / town list and the game's bestiary. */
     private void drawPeople(Canvas canvas, int w, float s, float top) {
+        float tabGap = 10 * s;
+        float tabWidth = (w - 40 * s - tabGap) / 2;
+        float ty = top + 4 * s - scrollY;
+        for (int index = 0; index < 2; index++) {
+            float tx = 20 * s + index * (tabWidth + tabGap);
+            boolean active = peopleTab == index;
+            String label = Strings.get(index == 0 ? "people_tab" : "bestiary");
+            panel(canvas, tx, ty, tx + tabWidth, ty + 64 * s, active ? 0xdd23457a : 0x99101a38, active ? GOLD : 0xff5a6ea8, s);
+            drawCentered(canvas, label, tx + tabWidth / 2, ty + 32 * s, fitText(label, 28 * s, tabWidth - 20 * s), INK);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "ptab_" + index;
+            hit.rect.set(tx, ty, tx + tabWidth, ty + 64 * s);
+            hits.add(hit);
+        }
+        if (peopleTab == 1) drawBestiary(canvas, w, s, top + 78 * s);
+        else drawTown(canvas, w, s, top + 78 * s);
+        neededHeight += 78 * s;
+    }
+
+    private static final int[] BESTIARY_KIND = {-1, 0, 1, 3, 2};
+
+    /** The game's bestiary as a grid of cards: the creature, its name and kill count; creatures not met yet are silhouettes. */
+    private void drawBestiary(Canvas canvas, int w, float s, float top) {
+        float y = top + 8 * s - scrollY;
+        float gap = 8 * s;
+        float chipW = (w - 60 * s - 5 * gap) / 6;
+        for (int index = 0; index < 6; index++) {
+            float cx = 30 * s + index * (chipW + gap);
+            boolean on = index == 5 ? bestiaryFoundOnly : index == bestiaryFilter;
+            panel(canvas, cx, y, cx + chipW, y + 56 * s, on ? 0xff347461 : 0x99101a38, on ? GOLD : 0xff5a6ea8, s);
+            String label = Strings.get(index == 5 ? "bf_found" : "bf_" + index);
+            buttonLabel(canvas, "bf_" + index, label, cx, y, chipW, 56 * s, 24 * s, s);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "bf_" + index;
+            hit.rect.set(cx, y, cx + chipW, y + 56 * s);
+            hits.add(hit);
+        }
+        y += 66 * s;
+        if (bestiaryList == null) {
+            drawText(canvas, Strings.get("bestiary_loading"), 40 * s, y + 10 * s, 30 * s, MUTED, true);
+            neededHeight = Math.max(neededHeight, y - top + scrollY + 80 * s);
+            return;
+        }
+        int found = 0;
+        int total = 0;
+        for (int index = 0; index < bestiaryList.length(); index++) {
+            JSONArray entry = bestiaryList.optJSONArray(index);
+            if (entry == null) continue;
+            total++;
+            if (entry.optInt(3) != 0) found++;
+        }
+        if (bestiaryTags == null) {
+            java.util.TreeSet<String> set = new java.util.TreeSet<>();
+            for (int index = 0; index < bestiaryList.length(); index++) {
+                JSONArray entry = bestiaryList.optJSONArray(index);
+                JSONArray tags = entry == null ? null : entry.optJSONArray(9);
+                for (int t = 0; tags != null && t < tags.length(); t++) set.add(tags.optString(t));
+            }
+            bestiaryTags = new java.util.ArrayList<>(set);
+            if (bestiaryBiome >= bestiaryTags.size()) bestiaryBiome = -1;
+        }
+        String progress = Strings.get("bestiary_found") + ": " + found + " / " + total;
+        drawText(canvas, progress, 30 * s, y - 2 * s, 26 * s, GOLD, true);
+        float barW = 300 * s;
+        fill.setColor(0xff0a1124);
+        canvas.drawRect(30 * s, y + 36 * s, 30 * s + barW, y + 52 * s, fill);
+        fill.setColor(0xff43c970);
+        canvas.drawRect(30 * s, y + 36 * s, 30 * s + barW * (total == 0 ? 0 : found / (float) total), y + 52 * s, fill);
+        String habitat = Strings.get("bst_habitat") + ": " + (bestiaryBiome < 0 || bestiaryTags.isEmpty() ? Strings.get("bst_any") : bestiaryTags.get(bestiaryBiome));
+        button(canvas, "bbiome", habitat, w - 30 * s - 520 * s, y - 4 * s, 520 * s, 60 * s, bestiaryBiome < 0 ? 0xff2a3a6a : 0xff347461, s);
+        y += 74 * s;
+        int columns = 5;
+        float cardW = (w - 60 * s - (columns - 1) * gap) / columns;
+        float cardH = 170 * s;
+        int shown = 0;
+        silhouette.setFilterBitmap(false);
+        silhouette.setColorFilter(new LightingColorFilter(0xff000000, 0xff0c1020));
+        for (int index = 0; index < bestiaryList.length(); index++) {
+            JSONArray entry = bestiaryList.optJSONArray(index);
+            if (entry == null) continue;
+            if (bestiaryFilter != 0 && entry.optInt(5) != BESTIARY_KIND[bestiaryFilter]) continue;
+            if (bestiaryFoundOnly && entry.optInt(3) == 0) continue;
+            if (bestiaryBiome >= 0 && bestiaryTags != null && bestiaryBiome < bestiaryTags.size()) {
+                JSONArray tags = entry.optJSONArray(9);
+                boolean match = false;
+                for (int t = 0; tags != null && t < tags.length(); t++) if (bestiaryTags.get(bestiaryBiome).equals(tags.optString(t))) match = true;
+                if (!match) continue;
+            }
+            float cx = 30 * s + (shown % columns) * (cardW + gap);
+            float cy = y + (shown / columns) * (cardH + gap);
+            shown++;
+            if (cy + cardH < top - 40 * s || cy > top + 1200 * s) continue;   // off screen
+            boolean known = entry.optInt(3) != 0;
+            panel(canvas, cx, cy, cx + cardW, cy + cardH, known ? 0xcc1b2a55 : 0xcc0a1124, known ? 0xff5a6ea8 : 0xff2a3556, s);
+            drawBackdrop(canvas, entry.isNull(8) ? -1 : entry.optInt(8, -1), cx + 4 * s, cy + 4 * s, cx + cardW - 4 * s, cy + 112 * s, known ? 170 : 70);
+            Bitmap sprite = sprites.get("npc:" + entry.optInt(0));
+            if (sprite != null) {
+                float fit = Math.min((cardW - 24 * s) / sprite.getWidth(), 96 * s / sprite.getHeight());
+                fit = Math.min(fit, 3.2f * s);
+                float sw = sprite.getWidth() * fit;
+                float sh = sprite.getHeight() * fit;
+                dstRect.set((int) (cx + (cardW - sw) / 2), (int) (cy + 10 * s + (96 * s - sh) / 2), (int) (cx + (cardW + sw) / 2),
+                    (int) (cy + 10 * s + (96 * s + sh) / 2));
+                canvas.drawBitmap(sprite, null, dstRect, known ? pixels : silhouette);
+            }
+            String name = known ? entry.optString(1) : "???";
+            drawCentered(canvas, name, cx + cardW / 2, cy + 128 * s, fitText(name, 22 * s, cardW - 12 * s), known ? INK : MUTED);
+            if (known && entry.optInt(5) != 2) {
+                String kills = Strings.get("bestiary_kills") + ": " + entry.optInt(2);
+                drawCentered(canvas, kills, cx + cardW / 2, cy + 154 * s, fitText(kills, 20 * s, cardW - 12 * s), GOLD);
+            }
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "bst_" + index;
+            hit.rect.set(cx, cy, cx + cardW, cy + cardH);
+            hits.add(hit);
+        }
+        neededHeight = Math.max(neededHeight, y - top + scrollY + ((shown + columns - 1) / columns) * (cardH + gap) + 20 * s);
+    }
+
+    /** The habitat picture the game puts behind a creature (cover-fitted into the box, fading downward is left to the frame). */
+    private void drawBackdrop(Canvas canvas, int id, float left, float top, float right, float bottom, int alpha) {
+        if (id < 0) return;
+        Bitmap picture = sprites.get("mapbg:" + id);
+        if (picture == null) return;
+        float scale = Math.max((right - left) / picture.getWidth(), (bottom - top) / picture.getHeight());
+        float sw = (right - left) / scale;
+        float sh = (bottom - top) / scale;
+        srcRect.set((int) ((picture.getWidth() - sw) / 2), (int) ((picture.getHeight() - sh) / 2),
+            (int) ((picture.getWidth() + sw) / 2), (int) ((picture.getHeight() + sh) / 2));
+        backdrop.setFilterBitmap(false);
+        backdrop.setAlpha(alpha);
+        dstRect.set(left, top, right, bottom);
+        canvas.drawBitmap(picture, srcRect, dstRect, backdrop);
+    }
+
+    private static String percent(double rate) {
+        double value = rate * 100;
+        if (value >= 99.95) return "100%";
+        if (value >= 10) return String.format(java.util.Locale.ROOT, "%.0f%%", value);
+        if (value >= 1) return String.format(java.util.Locale.ROOT, "%.1f%%", value);
+        return String.format(java.util.Locale.ROOT, "%.2f%%", value);
+    }
+
+    /** One bestiary page: portrait, stats, flavour text, habitats and drops, each as far as the game has unlocked it. */
+    private void drawBestiaryDetail(Canvas canvas, int w, int h, float s) {
+        hits.clear();
+        fill.setColor(0xcc02060f);
+        canvas.drawRect(0, 0, w, h, fill);
+        Hit outside = new Hit();
+        outside.type = 9;
+        outside.rect.set(0, 0, w, h);
+        hits.add(outside);
+        float left = 16 * s;
+        float right = w - 16 * s;
+        float top = 14 * s;
+        float bottom = h - 14 * s;
+        panel(canvas, left, top, right, bottom, 0xf0101a38, 0xff8ea2d8, s);
+        Hit body = new Hit();
+        body.type = 8;
+        body.rect.set(left, top, right, bottom);
+        hits.add(body);
+        button(canvas, "bd_close", "x", right - 116 * s, top + 12 * s, 96 * s, 64 * s, 0xff2a3a6a, s);
+        JSONObject info = bstInfo;
+        if (info == null) {
+            drawCentered(canvas, Strings.get("bestiary_loading"), w / 2f, h / 2f, 34 * s, MUTED);
+            return;
+        }
+        int state = info.optInt("state", 0);
+        boolean known = state != 0;
+        // portrait
+        float px = left + 24 * s;
+        float py = top + 24 * s;
+        panel(canvas, px, py, px + 190 * s, py + 190 * s, 0xcc0a1124, 0xff5a6ea8, s);
+        drawBackdrop(canvas, info.optInt("bg", -1), px + 4 * s, py + 4 * s, px + 186 * s, py + 186 * s, state >= 1 ? 230 : 90);
+        Bitmap sprite = sprites.get("npc:" + info.optInt("id"));
+        if (sprite != null) {
+            float fit = Math.min(170 * s / sprite.getWidth(), 170 * s / sprite.getHeight());
+            fit = Math.min(fit, 4f * s);
+            float sw = sprite.getWidth() * fit;
+            float sh = sprite.getHeight() * fit;
+            dstRect.set(px + (190 * s - sw) / 2, py + (190 * s - sh) / 2, px + (190 * s + sw) / 2, py + (190 * s + sh) / 2);
+            canvas.drawBitmap(sprite, null, dstRect, state >= 1 ? pixels : silhouette);
+        }
+        float tx = px + 214 * s;
+        String name = known ? info.optString("name") : "???";
+        drawText(canvas, name, tx, py + 6 * s, fitText(name, 44 * s, right - tx - 140 * s), GOLD, true);
+        drawText(canvas, Strings.get("bestiary_kills") + ": " + info.optInt("kills"), tx, py + 70 * s, 30 * s, INK, true);
+        // stats
+        float y = py + 214 * s;
+        JSONObject stats = info.optJSONObject("stats");
+        if (state >= 2 && stats != null) {
+            String[] keys = {"st_life", "st_damage", "st_defense", "st_kb", "st_value"};
+            String[] values = {Integer.toString(stats.optInt("life")), Integer.toString(stats.optInt("damage")),
+                Integer.toString(stats.optInt("defense")), Math.round((1 - stats.optDouble("knockback", 1)) * 100) + "%",
+                coins((int) stats.optDouble("value"))};
+            float cell = (right - left - 48 * s - 4 * 8 * s) / 5;
+            for (int index = 0; index < 5; index++) {
+                float cx = left + 24 * s + index * (cell + 8 * s);
+                panel(canvas, cx, y, cx + cell, y + 92 * s, 0xcc1b2a55, 0xff5a6ea8, s);
+                drawCentered(canvas, Strings.get(keys[index]), cx + cell / 2, y + 22 * s, fitText(Strings.get(keys[index]), 20 * s, cell - 10 * s), MUTED);
+                drawCentered(canvas, values[index], cx + cell / 2, y + 62 * s, fitText(values[index], 30 * s, cell - 10 * s), INK);
+            }
+        } else if (known) {
+            drawText(canvas, Strings.get("bst_locked_stats"), left + 24 * s, y + 24 * s, 26 * s, MUTED, true);
+        }
+        y += 106 * s;
+        // flavour text and habitats
+        String flavor = info.optString("flavor");
+        if (known && !flavor.isEmpty()) {
+            for (String line : wrap(flavor, right - left - 48 * s, 26 * s)) {
+                drawText(canvas, line, left + 24 * s, y, 26 * s, INK, true);
+                y += 32 * s;
+            }
+            y += 6 * s;
+        } else if (!known) {
+            drawText(canvas, Strings.get("bst_no_text"), left + 24 * s, y, 26 * s, MUTED, true);
+            y += 38 * s;
+        }
+        JSONArray biomes = info.optJSONArray("biomes");
+        if (known && biomes != null && biomes.length() > 0) {
+            StringBuilder where = new StringBuilder(Strings.get("bst_found_in")).append(": ");
+            for (int index = 0; index < biomes.length(); index++) where.append(index == 0 ? "" : ", ").append(biomes.optString(index));
+            for (String line : wrap(where.toString(), right - left - 48 * s, 24 * s)) {
+                drawText(canvas, line, left + 24 * s, y, 24 * s, 0xffffe9a8, true);
+                y += 30 * s;
+            }
+            y += 6 * s;
+        }
+        // drops
+        JSONArray drops = info.optJSONArray("drops");
+        if (state >= 3 && drops != null && drops.length() > 0) {
+            drawText(canvas, Strings.get("bst_drops"), left + 24 * s, y, 28 * s, GOLD, true);
+            y += 38 * s;
+            int columns = 8;
+            float cell = (right - left - 48 * s - (columns - 1) * 8 * s) / columns;
+            float rowH = cell + 26 * s;
+            for (int index = 0; index < drops.length() && index < 24; index++) {
+                JSONArray drop = drops.optJSONArray(index);
+                if (drop == null) continue;
+                float cx = left + 24 * s + (index % columns) * (cell + 8 * s);
+                float cy = y + (index / columns) * rowH;
+                if (cy + rowH > bottom - 6 * s) break;
+                panel(canvas, cx, cy, cx + cell, cy + cell, 0xcc1b2a55, 0xff5a6ea8, s);
+                Bitmap icon = sprites.get("item:" + drop.optInt(0));
+                if (icon != null) {
+                    float fit = Math.min((cell - 16 * s) / icon.getWidth(), (cell - 16 * s) / icon.getHeight());
+                    fit = Math.min(fit, 2.5f * s);
+                    drawSprite(canvas, icon, cx + (cell - icon.getWidth() * fit) / 2, cy + (cell - icon.getHeight() * fit) / 2,
+                        icon.getWidth() * fit, icon.getHeight() * fit);
+                }
+                if (drop.optInt(2) > 1) {
+                    String amount = drop.optInt(1) == drop.optInt(2) ? Integer.toString(drop.optInt(2)) : drop.optInt(1) + "-" + drop.optInt(2);
+                    drawText(canvas, amount, cx + cell - measure(amount, 18 * s) - 4 * s, cy + cell - 24 * s, 18 * s, INK, true);
+                }
+                if (state >= 4) {
+                    String chance = percent(drop.optDouble(3));
+                    drawCentered(canvas, chance, cx + cell / 2, cy + cell + 12 * s, fitText(chance, 20 * s, cell), GOLD);
+                }
+                Hit hit = new Hit();
+                hit.type = 2;
+                hit.name = "bdrop_" + index;
+                hit.rect.set(cx, cy, cx + cell, cy + cell);
+                hits.add(hit);
+            }
+        } else if (known && state >= 2) {
+            drawText(canvas, Strings.get("bst_locked_drops"), left + 24 * s, y, 26 * s, MUTED, true);
+        }
+        if (feedbackActive()) {
+            drawCenteredBox(canvas, feedback, w / 2f, bottom - 34 * s, 30 * s, 0xffffe9a8);
+        }
+    }
+
+    private void drawTown(Canvas canvas, int w, float s, float top) {
         JSONObject people = latest == null ? null : latest.optJSONObject("people");
         float y = top + 8 * s - scrollY;
         int team = latest == null ? 0 : latest.optInt("team");
@@ -2096,6 +2456,14 @@ final class TerraPanel extends View {
             }
             canvas.restore();
         }
+        if (!mapTip.isEmpty() && SystemClock.uptimeMillis() < mapTipUntil) {
+            float size = 30 * s;
+            float tw = measure(mapTip, size) + 36 * s;
+            float tx = Math.max(mapPort.left + 8 * s, Math.min(mapPort.right - tw - 8 * s, mapTipX - tw / 2));
+            float ty = Math.max(mapPort.top + 8 * s, mapTipY - 96 * s);
+            panel(canvas, tx, ty, tx + tw, ty + 56 * s, 0xee101a38, GOLD, s);
+            drawCentered(canvas, mapTip, tx + tw / 2, ty + 28 * s, size, INK);
+        }
         stroke.setColor(0xfff0c860);
         stroke.setStrokeWidth(3 * s);
         canvas.drawRect(mapPort, stroke);
@@ -2726,6 +3094,8 @@ final class TerraPanel extends View {
                 lastY = y;
                 downAt = SystemClock.uptimeMillis();
                 downHit = hitAt(x, y);
+                removeCallbacks(mapHold);
+                if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen && mapPort.contains(x, y)) postDelayed(mapHold, 450);
                 dragging = false;
                 scrolling = false;
                 hover = null;
@@ -2736,6 +3106,7 @@ final class TerraPanel extends View {
             case MotionEvent.ACTION_MOVE:
                 if (scaling) return true;
                 float distance = Math.max(Math.abs(x - downX), Math.abs(y - downY));
+                if (distance > 16 * s) removeCallbacks(mapHold);
                 if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen) {
                     if (distance > 8 * s || !follow) {
                         float perTile = viewScale;
@@ -2796,7 +3167,8 @@ final class TerraPanel extends View {
                         hover = null;
                     }
                 } else if (!scrolling && distance > 18 * s && !sheetOpen
-                    && (downHit == null || downHit.type == 3 || downHit.type == 0 || downHit.type == 5)) {
+                    && (downHit == null || downHit.type == 3 || downHit.type == 0 || downHit.type == 5
+                        || (downHit.type == 2 && downHit.name != null && downHit.name.startsWith("bst_")))) {
                     scrolling = true;
                 }
                 if (scrolling) {
@@ -2818,11 +3190,13 @@ final class TerraPanel extends View {
                 dragStartCy = viewCy;
                 return true;
             case MotionEvent.ACTION_UP:
+                removeCallbacks(mapHold);
                 stopCraftHold();
                 if (scaling) { scaling = false; return true; }
                 finishTouch(x, y);
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                removeCallbacks(mapHold);
                 stopCraftHold();
                 dragging = false;
                 edgeZone = 0;
@@ -2888,7 +3262,7 @@ final class TerraPanel extends View {
                 break;
             case 3: selectedRecipe = hit.index; break;
             case 5: shopSelection = hit.index; break;
-            case 9: sheetOpen = false; recipeViewOpen = false; splitMode = 0; sound("close"); break;
+            case 9: sheetOpen = false; recipeViewOpen = false; bstOpenId = -1; splitMode = 0; sound("close"); break;
             case 4: break;
             case 8: break;
             default: tapSlot(hit, longPress); break;
@@ -3020,6 +3394,58 @@ final class TerraPanel extends View {
             TlProPanel.put(command, "kind", "togglevisible");
             TlProPanel.put(command, "slot", Integer.parseInt(name.substring(4)));
             send.accept(command);
+            return;
+        }
+        if (name.equals("pause")) {
+            JSONObject command = op("pause");
+            TlProPanel.put(command, "on", !(latest != null && latest.optBoolean("paused")));
+            send.accept(command);
+            return;
+        }
+        if (name.equals("bd_close")) {
+            bstOpenId = -1;
+            sound("close");
+            return;
+        }
+        if (name.startsWith("bdrop_")) {
+            JSONArray names = bstInfo == null ? null : bstInfo.optJSONArray("dropNames");
+            if (names != null) {
+                feedback = names.optString(Integer.parseInt(name.substring(6)));
+                feedbackLocal = true;
+                feedbackUntil = SystemClock.uptimeMillis() + 2600;
+            }
+            return;
+        }
+        if (name.startsWith("ptab_")) {
+            peopleTab = Integer.parseInt(name.substring(5));
+            scrollY = 0;
+            lastBestiaryAsk = 0;
+            return;
+        }
+        if (name.equals("bbiome")) {
+            if (bestiaryTags != null && !bestiaryTags.isEmpty()) {
+                bestiaryBiome++;
+                if (bestiaryBiome >= bestiaryTags.size()) bestiaryBiome = -1;
+                scrollY = 0;
+            }
+            return;
+        }
+        if (name.startsWith("bf_")) {
+            int which = Integer.parseInt(name.substring(3));
+            if (which == 5) bestiaryFoundOnly = !bestiaryFoundOnly;
+            else bestiaryFilter = which;
+            scrollY = 0;
+            return;
+        }
+        if (name.startsWith("bst_")) {
+            JSONArray entry = bestiaryList == null ? null : bestiaryList.optJSONArray(Integer.parseInt(name.substring(4)));
+            if (entry != null) {
+                bstOpenId = entry.optInt(0);
+                bstInfo = null;
+                bstWanted = true;
+                sound("open");
+                refresh.run();
+            }
             return;
         }
         if (name.startsWith("petswitch_")) {

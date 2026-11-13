@@ -514,6 +514,200 @@ function buffName(type) {
     return buffNames.get(type);
 }
 
+// The game's bestiary: [npcId, name, kills, seen, talked, kind (0 enemy, 1 boss, 2 town NPC, 3 critter), frames, unlock state,
+// background texture id (-1 none, null not read yet), [habitat names] (null not read yet)].
+let bestiaryAt = 0;
+let bestiaryCache = [];
+let bestiaryPending = 0;
+const bestiaryMeta = new Map();
+
+// The game's own rule for how much of an entry the player may see, from kills / sightings / conversations.
+function unlockStateOf(entry, npc, kills, seen, talked, kind) {
+    try {
+        const provider = entry.UIInfoProvider;
+        const needed = provider._killCountNeededToFullyUnlock;
+        const quick = !!provider._quickUnlock;
+        const value = Number(lazyClass("Terraria.GameContent.Bestiary", "CommonEnemyUICollectionInfoProvider")[
+            "BestiaryEntryUnlockState GetUnlockStateByKillCount(int killCount, bool quickUnlock, int fullKillCountNeeded)"](
+            kills, quick, needed));
+        if (Number.isFinite(value)) {
+            return value === 0 && seen ? 1 : value;
+        }
+    } catch (_) { /* another kind of provider */ }
+    if (kind === 2) {
+        return talked ? 4 : seen ? 1 : 0;
+    }
+    if (kind === 1 || kind === 3) {
+        return kills > 0 ? 4 : seen ? 1 : 0;
+    }
+    return kills >= 50 ? 4 : kills >= 25 ? 3 : kills >= 1 ? 2 : seen ? 1 : 0;
+}
+
+// Habitat tags and the portrait background of an entry; read a few entries per call so the list never stalls the game.
+function metaOf(entry, text) {
+    const meta = { bg: -1, tags: [] };
+    const info = entry.Info;
+    const count = info.get_Count();
+    for (let index = 0; index < count; index++) {
+        const element = info.get_Item(index);
+        let tagged = false;
+        try {
+            tagged = element._filterIconFrame !== undefined;
+        } catch (_) { /* not a habitat element */ }
+        if (!tagged) {
+            continue;
+        }
+        try {
+            meta.tags.push(text(String(element._key)));
+        } catch (_) { /* no name */ }
+        if (meta.bg < 0) {
+            try {
+                const path = String(element._backgroundImagePath);
+                const match = /MapBG(\d+)/.exec(path);
+                if (match) {
+                    meta.bg = Number(match[1]) - 1;
+                }
+            } catch (_) { /* no background */ }
+        }
+    }
+    return meta;
+}
+
+function readBestiary() {
+    const now = Date.now();
+    if (now - bestiaryAt < 700 || (bestiaryPending === 0 && now - bestiaryAt < 4000)) {
+        return bestiaryCache;
+    }
+    bestiaryAt = now;
+    const result = [];
+    let budget = 70;
+    let pending = 0;
+    try {
+        const database = Main.BestiaryDB;
+        const tracker = Main.BestiaryTracker;
+        const samples = lazyClass("Terraria.ID", "ContentSamples").NpcsByNetId;
+        const language = lazyClass("Terraria.Localization", "Language");
+        const text = (key) => String(language["string GetTextValue(string key)"](key));
+        const total = Main.npcFrameCount.length;
+        for (let id = 1; id < total; id++) {
+            try {
+                const entry = database.FindEntryByNPCID(id);
+                if (!entry) {
+                    continue;
+                }
+                const npc = samples.get_Item(id);
+                if (!npc) {
+                    continue;
+                }
+                const kills = safe(() => tracker.Kills["int GetKillCount(NPC npc)"](npc), 0);
+                const seen = safe(() => tracker.Sights["bool GetWasNearbyBefore(NPC npc)"](npc), false);
+                const talked = safe(() => tracker.Chats["bool GetWasChatWith(NPC npc)"](npc), false);
+                const kind = npc.townNPC ? 2 : npc.boss ? 1 : safe(() => npc.CountsAsACritter, false) ? 3 : 0;
+                let meta = bestiaryMeta.get(id);
+                if (!meta && budget > 0) {
+                    budget--;
+                    meta = safe(() => metaOf(entry, text), { bg: -1, tags: [] });
+                    bestiaryMeta.set(id, meta);
+                }
+                if (!meta) {
+                    pending++;
+                }
+                const state = unlockStateOf(entry, npc, kills, seen, talked, kind);
+                result.push([id, String(Lang.GetNPCNameValue(id)), kills, seen || kills > 0 || state > 0 ? 1 : 0, talked ? 1 : 0,
+                    kind, Math.max(1, Main.npcFrameCount[id]), state, meta ? meta.bg : null, meta ? meta.tags : null]);
+            } catch (_) { /* skip this entry */ }
+        }
+    } catch (_) { /* no bestiary in this build */ }
+    bestiaryCache = result;
+    bestiaryPending = pending;
+    return result;
+}
+
+function bestiaryPendingCount() {
+    return bestiaryPending;
+}
+
+// One bestiary page, like the game's: stats, flavour text, where it lives and what it drops (each part as far as the game has
+// unlocked it for this player).
+function bestiaryInfo(id) {
+    if (!Number.isInteger(id) || id < 1) {
+        throw new Error("Неверный NPC");
+    }
+    const database = Main.BestiaryDB;
+    const tracker = Main.BestiaryTracker;
+    const entry = database.FindEntryByNPCID(id);
+    if (!entry) {
+        throw new Error("Нет записи в бестиарии");
+    }
+    const samples = lazyClass("Terraria.ID", "ContentSamples").NpcsByNetId;
+    const npc = samples.get_Item(id);
+    const language = lazyClass("Terraria.Localization", "Language");
+    const kills = safe(() => tracker.Kills["int GetKillCount(NPC npc)"](npc), 0);
+    const seen = safe(() => tracker.Sights["bool GetWasNearbyBefore(NPC npc)"](npc), false);
+    const talked = safe(() => tracker.Chats["bool GetWasChatWith(NPC npc)"](npc), false);
+    const kind = npc.townNPC ? 2 : npc.boss ? 1 : safe(() => npc.CountsAsACritter, false) ? 3 : 0;
+    const result = { id, name: String(Lang.GetNPCNameValue(id)), kills,
+        state: unlockStateOf(entry, npc, kills, seen, talked, kind), biomes: [], drops: [],
+        flavor: "", catches: 0, stats: null, bg: -1 };
+    const info = entry.Info;
+    const count = info.get_Count();
+    for (let index = 0; index < count; index++) {
+        const element = info.get_Item(index);
+        const text = (key) => String(language["string GetTextValue(string key)"](key));
+        try {
+            if (element.LifeMax !== undefined && element.Damage !== undefined) {
+                result.stats = { life: element.LifeMax, damage: element.Damage, defense: element.Defense,
+                    knockback: element.KnockbackResist, value: element.MonetaryValue };
+                continue;
+            }
+        } catch (_) { /* not a stats element */ }
+        try {
+            const rate = element._droprateInfo;
+            if (rate !== undefined && rate !== null) {
+                result.drops.push([rate.itemId, rate.stackMin, rate.stackMax, rate.dropRate]);
+                continue;
+            }
+        } catch (_) { /* not a drop */ }
+        try {
+            if (element._itemType !== undefined) {
+                result.catches = element._itemType;
+                continue;
+            }
+        } catch (_) { /* not a catch item */ }
+        try {
+            if (element._filterIconFrame !== undefined) {
+                const key = String(element._key);
+                if (key.length > 0) {
+                    result.biomes.push(text(key));
+                }
+                if (result.bg < 0) {
+                    const match = /MapBG(\d+)/.exec(String(element._backgroundImagePath));
+                    if (match) {
+                        result.bg = Number(match[1]) - 1;
+                    }
+                }
+                continue;
+            }
+        } catch (_) { /* not a spawn condition */ }
+        let namePlate = false;
+        try {
+            namePlate = element._npcNetId !== undefined;
+        } catch (_) { /* no such field */ }
+        if (!namePlate) {
+            try {
+                const key = String(element._key);
+                if (key.startsWith("Bestiary_FlavorText")) {
+                    result.flavor = text(key);
+                }
+            } catch (_) { /* not flavour text */ }
+        }
+    }
+    result.drops.sort((a, b) => b[3] - a[3]);
+    result.drops = result.drops.slice(0, 40);
+    result.dropNames = result.drops.map((drop) => safe(() => String(Lang.GetItemNameValue(drop[0])), ""));
+    return { bestiaryinfo: result };
+}
+
 // Active buffs and debuffs: [type, ticks left, isDebuff, localised name, isPet, slot, 1 pet / 2 light pet / 0 other]
 function readBuffs(player) {
     const result = [];
@@ -743,4 +937,4 @@ function backgrounds() {
     return result;
 }
 
-export { toggleHidden, applyHidden, readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { bestiaryPendingCount, bestiaryInfo, readBestiary, toggleHidden, applyHidden, readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

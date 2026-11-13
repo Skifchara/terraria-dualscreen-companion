@@ -120,6 +120,15 @@ def extract_db(tex, db):
                 index.putpalette(flat)
                 image = index.convert("RGBA")
                 image.putalpha(mask)
+            elif pal is not None:
+                # several palette rows and no alpha plane (most NPC pages): index 0 is transparent, the rest opaque
+                mask = alpha_of(base.image).convert("L").point(lambda value: 0 if value == 0 else 255)
+                holder = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                holder.putalpha(mask)
+
+                class _Mask:
+                    image = holder
+                image = compose(base, _Mask, pal.image)
             else:
                 image = base.image.convert("RGBA")
             image.save(os.path.join(OUT, "%s%d_%d.png" % (db, number, w)))

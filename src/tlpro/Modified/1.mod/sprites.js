@@ -14,7 +14,7 @@ const uiNames = new Set(["InventoryBack", "InventoryBack2", "InventoryBack3", "I
     "MapPing", "MapDeath", "ColorSlider", "ColorBar", "BuilderAcc", "BuilderTools", "QuicksIcon", "Trash"]);
 // Indexed arrays: name -> TextureAssets field
 const arrays = { item: "Item", background: "Background", moon: "Moon", cloud: "Cloud", star: "Star",
-    mapbg: "MapBGs", mapicon: "MapIcon", extra: "Extra", npchead: "NpcHead", bosshead: "NpcHeadBoss", playerhair: "PlayerHair", cursor: "Cursors", buff: "Buff",
+    mapbg: "MapBGs", mapicon: "MapIcon", extra: "Extra", npc: "Npc", npchead: "NpcHead", bosshead: "NpcHeadBoss", playerhair: "PlayerHair", cursor: "Cursors", buff: "Buff",
     craft: "CraftToggle", sort: "InventorySort", hotbarlock: "HbLock", coin: "Coin" };
 
 function encode(texture) {
@@ -73,6 +73,12 @@ function find(request) {
             throw new Error("Неизвестный предмет");
         }
         Main.instance.LoadItem(request.id);
+    }
+    if (kind === "npc") {
+        if (request.id >= TextureAssets.Npc.length) {
+            throw new Error("Неизвестный NPC");
+        }
+        Main.instance.LoadNPC(request.id);
     }
     if (kind === "background") {
         try {
@@ -149,6 +155,9 @@ function frameCount(request, texture) {
         // character sheets stack 56-pixel frames
         return Math.max(1, Math.round(texture.Height / 56));
     }
+    if (kind === "npc") {
+        return Math.max(1, safe(() => Main.npcFrameCount[request.id], 1));
+    }
     if (kind !== "item") {
         return 1;
     }
@@ -164,6 +173,17 @@ const ContentSamples = new NativeClass("Terraria.ID", "ContentSamples");
 
 // Items such as Gel are drawn from a grey sprite that the game tints with Item.color at draw time.
 function tintOf(request) {
+    if (String(request.kind) === "npc") {
+        // slimes and similar creatures are drawn from a grey sprite tinted with the creature's colour
+        try {
+            const npc = ContentSamples.NpcsByNetId.get_Item(request.id);
+            const c = npc.color;
+            if (c.R || c.G || c.B) {
+                return [c.R, c.G, c.B, c.A, Math.min(70, npc.alpha)];
+            }
+        } catch (_) { /* no tint */ }
+        return undefined;
+    }
     if (String(request.kind) !== "item") {
         return undefined;
     }
