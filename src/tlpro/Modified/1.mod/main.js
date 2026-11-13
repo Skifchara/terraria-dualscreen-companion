@@ -494,6 +494,9 @@ Main.DoUpdate.hook((original, self, gameTime) => {
     holdInventoryShut();
     original(self, gameTime);
     finishMirroredInteraction();
+    try {
+        game.applyHidden(Main.get_LocalPlayer());
+    } catch (_) { /* not in a world */ }
     rescueBumpers(before, inventoryBefore);
     const now = Date.now();
     if (now < nextTick) {

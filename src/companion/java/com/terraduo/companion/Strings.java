@@ -121,6 +121,8 @@ final class Strings {
         put("pet_hidden", "Pet: off", "Питомец: выкл", "Mascota: no", "Zwierzak: wył.");
         put("light_shown", "Light: on", "Свет: вкл", "Luz: sí", "Światło: wł.");
         put("light_hidden", "Light: off", "Свет: выкл", "Luz: no", "Światło: wył.");
+        put("wings_shown", "Wings: on", "Крылья: вкл", "Alas: sí", "Skrzydła: wł.");
+        put("wings_hidden", "Wings: off", "Крылья: выкл", "Alas: no", "Skrzydła: wył.");
         put("buff_removed", "Removed", "Снято", "Quitado", "Usunięto");
         put("buff_debuff", "A debuff can't be removed", "Дебафф нельзя снять", "Un perjuicio no se puede quitar", "Debuffa nie można zdjąć");
         put("hint_drag", "Drag an item to move it", "Перетащи предмет, чтобы переместить", "Arrastra un objeto para moverlo", "Przeciągnij przedmiot, aby go przenieść");

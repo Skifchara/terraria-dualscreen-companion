@@ -32,6 +32,38 @@ function setHousing(result) {
     lastHousing = Object.assign({ at: Date.now() }, result);
 }
 
+// Armour / wings the player chose to hide on the character (the game only has eye buttons for accessories).
+// Applied after every update, so the equipment itself (defence, set bonuses, flight) is untouched.
+const hidden = { armor: [false, false, false], wings: false };
+
+function toggleHidden(kind, slot) {
+    if (kind === "wings") {
+        hidden.wings = !hidden.wings;
+    } else if (Number.isInteger(slot) && slot >= 0 && slot <= 2) {
+        hidden.armor[slot] = !hidden.armor[slot];
+    } else {
+        throw new Error("Неверный слот");
+    }
+}
+
+function applyHidden(player) {
+    if (!hidden.wings && !hidden.armor[0] && !hidden.armor[1] && !hidden.armor[2]) {
+        return;
+    }
+    if (hidden.armor[0]) {
+        player.head = -1;
+    }
+    if (hidden.armor[1]) {
+        player.body = -1;
+    }
+    if (hidden.armor[2]) {
+        player.legs = -1;
+    }
+    if (hidden.wings) {
+        player.wings = 0;
+    }
+}
+
 // Resolved on first use so a missing class can never stop the whole mod from loading.
 const lazyClasses = new Map();
 
@@ -662,6 +694,7 @@ function snapshot(player, pane, page) {
     if (pane === "equipment") {
         state.equipment = equipmentArrays.map((field, index) => slots(player[field], [20, 10, 5, 5][index]));
         // which accessory slots have their look hidden (the game's eye buttons), by armour slot 0..9
+        state.hideLook = [hidden.armor[0], hidden.armor[1], hidden.armor[2], hidden.wings];
         state.hideAcc = [];
         for (let index = 0; index < 10; index++) {
             state.hideAcc.push(!!safe(() => player.hideVisibleAccessory[index], false));
@@ -710,4 +743,4 @@ function backgrounds() {
     return result;
 }
 
-export { readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { toggleHidden, applyHidden, readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

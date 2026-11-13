@@ -1372,6 +1372,7 @@ final class TerraPanel extends View {
             y += 32 * s;
             slotRow(canvas, w, s, y, rows[row][0], rows[row][1], rows[row][2], rows[row][0] >= 3 ? utility : labels, 10);
             if (row == 0) eyeButtons(canvas, w, s, y);
+            if (row == 0) wingsToggle(canvas, w, s, y - 32 * s);
             y += size + 12 * s;
         }
         neededHeight = Math.max(neededHeight, y - top + scrollY);
@@ -1384,9 +1385,10 @@ final class TerraPanel extends View {
         float total = 10 * (size + 6 * s) - 6 * s;
         float x0 = (w - total) / 2;
         float eye = 34 * s;
-        for (int slot = 3; slot <= 9; slot++) {
+        JSONArray look = latest == null ? null : latest.optJSONArray("hideLook");
+        for (int slot = 0; slot <= 9; slot++) {
             if (typeOf(slotData(1, slot)) == 0) continue;
-            boolean off = hidden != null && hidden.optBoolean(slot);
+            boolean off = slot < 3 ? look != null && look.optBoolean(slot) : hidden != null && hidden.optBoolean(slot);
             float ex = x0 + slot * (size + 6 * s) + size - eye - 2 * s;
             float ey = y + 2 * s;
             fill.setColor(off ? 0xcc3a1a1a : 0xcc101a38);
@@ -1394,10 +1396,18 @@ final class TerraPanel extends View {
             drawSymbol(canvas, off ? "eyeoff" : "eye", ex + eye / 2, ey + eye / 2, eye * 0.62f);
             Hit hit = new Hit();
             hit.type = 2;
-            hit.name = "eye_" + slot;
+            hit.name = slot < 3 ? "look_armor_" + slot : "eye_" + slot;
             hit.rect.set(ex - 4 * s, ey - 2 * s, ex + eye + 4 * s, ey + eye + 4 * s);
             hits.add(hit);
         }
+    }
+
+    /** A switch on the armour header that hides the wings on the character. */
+    private void wingsToggle(Canvas canvas, int w, float s, float y) {
+        JSONArray look = latest == null ? null : latest.optJSONArray("hideLook");
+        boolean off = look != null && look.optBoolean(3);
+        button(canvas, "look_wings", Strings.get(off ? "wings_hidden" : "wings_shown"), w - 20 * s - 170 * s, y - 4 * s, 170 * s,
+            34 * s, off ? 0xff2a3a6a : 0xff347461, s);
     }
 
     /** Whether the pet (kind 1) or light pet (kind 2) is out: an item in its slot and the matching buff active. */
@@ -2991,6 +3001,14 @@ final class TerraPanel extends View {
             JSONObject command = op("act");
             TlProPanel.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
             if (!name.equals("pvp")) TlProPanel.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+            send.accept(command);
+            return;
+        }
+        if (name.startsWith("look_")) {
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "togglelook");
+            TlProPanel.put(command, "what", name.equals("look_wings") ? "wings" : "armor");
+            if (!name.equals("look_wings")) TlProPanel.put(command, "slot", Integer.parseInt(name.substring(11)));
             send.accept(command);
             return;
         }

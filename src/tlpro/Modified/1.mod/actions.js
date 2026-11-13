@@ -495,6 +495,9 @@ function actWithoutSound(player, request) {
             player.hideVisibleAccessory[slot] = !player.hideVisibleAccessory[slot];
             break;
         }
+        case "togglelook":
+            game.toggleHidden(request.what, request.slot);
+            break;
         case "togglepet":
             // Show or hide the pet (0) or light pet (1) of the equipment slots, as the game's own buttons do.
             if (request.which === 1) {
