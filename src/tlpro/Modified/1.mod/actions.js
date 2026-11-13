@@ -486,6 +486,15 @@ function actWithoutSound(player, request) {
             }
             break;
         }
+        case "togglevisible": {
+            // The game's eye button on an accessory slot: show or hide how it looks on the character.
+            const slot = request.slot;
+            if (!Number.isInteger(slot) || slot < 3 || slot > 9) {
+                throw new Error("Неверный слот");
+            }
+            player.hideVisibleAccessory[slot] = !player.hideVisibleAccessory[slot];
+            break;
+        }
         case "togglepet":
             // Show or hide the pet (0) or light pet (1) of the equipment slots, as the game's own buttons do.
             if (request.which === 1) {

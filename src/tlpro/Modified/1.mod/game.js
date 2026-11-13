@@ -661,6 +661,11 @@ function snapshot(player, pane, page) {
     }
     if (pane === "equipment") {
         state.equipment = equipmentArrays.map((field, index) => slots(player[field], [20, 10, 5, 5][index]));
+        // which accessory slots have their look hidden (the game's eye buttons), by armour slot 0..9
+        state.hideAcc = [];
+        for (let index = 0; index < 10; index++) {
+            state.hideAcc.push(!!safe(() => player.hideVisibleAccessory[index], false));
+        }
         state.unlocked = Array.from({ length: 10 }, (_, index) => player.IsItemSlotUnlockedAndUsable(index));
     } else if (pane === "craft") {
         state.recipes = readRecipes(Number.isInteger(page) && page >= 0 ? page : 0);

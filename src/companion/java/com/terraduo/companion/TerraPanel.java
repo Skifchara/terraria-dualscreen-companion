@@ -1118,6 +1118,16 @@ final class TerraPanel extends View {
                 symbolPath.close();
                 canvas.drawPath(symbolPath, fill);
                 break;
+            case "eye":
+            case "eyeoff":
+                stroke.setStyle(Paint.Style.STROKE);
+                symbolPath.moveTo(cx - r, cy);
+                symbolPath.quadTo(cx, cy - r * 1.3f, cx + r, cy);
+                symbolPath.quadTo(cx, cy + r * 1.3f, cx - r, cy);
+                canvas.drawPath(symbolPath, stroke);
+                canvas.drawCircle(cx, cy, r * 0.3f, fill);
+                if (symbol.equals("eyeoff")) canvas.drawLine(cx - r, cy + r * 0.8f, cx + r, cy - r * 0.8f, stroke);
+                break;
             case "split":
                 canvas.drawRect(cx - r, cy - r * 0.5f, cx - r * 0.1f, cy + r * 0.5f, fill);
                 canvas.drawRect(cx + r * 0.1f, cy - r * 0.5f, cx + r, cy + r * 0.5f, fill);
@@ -1361,9 +1371,33 @@ final class TerraPanel extends View {
             if (row == 3) petToggles(canvas, w, s, y);
             y += 32 * s;
             slotRow(canvas, w, s, y, rows[row][0], rows[row][1], rows[row][2], rows[row][0] >= 3 ? utility : labels, 10);
+            if (row == 0) eyeButtons(canvas, w, s, y);
             y += size + 12 * s;
         }
         neededHeight = Math.max(neededHeight, y - top + scrollY);
+    }
+
+    /** The game's eye buttons: a small toggle on the corner of every accessory slot that hides how it looks on the character. */
+    private void eyeButtons(Canvas canvas, int w, float s, float y) {
+        JSONArray hidden = latest == null ? null : latest.optJSONArray("hideAcc");
+        float size = slotSize(w, s, 10);
+        float total = 10 * (size + 6 * s) - 6 * s;
+        float x0 = (w - total) / 2;
+        float eye = 34 * s;
+        for (int slot = 3; slot <= 9; slot++) {
+            if (typeOf(slotData(1, slot)) == 0) continue;
+            boolean off = hidden != null && hidden.optBoolean(slot);
+            float ex = x0 + slot * (size + 6 * s) + size - eye - 2 * s;
+            float ey = y + 2 * s;
+            fill.setColor(off ? 0xcc3a1a1a : 0xcc101a38);
+            canvas.drawRoundRect(ex, ey, ex + eye, ey + eye, 6 * s, 6 * s, fill);
+            drawSymbol(canvas, off ? "eyeoff" : "eye", ex + eye / 2, ey + eye / 2, eye * 0.62f);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "eye_" + slot;
+            hit.rect.set(ex - 4 * s, ey - 2 * s, ex + eye + 4 * s, ey + eye + 4 * s);
+            hits.add(hit);
+        }
     }
 
     /** Whether the pet (kind 1) or light pet (kind 2) is out: an item in its slot and the matching buff active. */
@@ -2957,6 +2991,13 @@ final class TerraPanel extends View {
             JSONObject command = op("act");
             TlProPanel.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
             if (!name.equals("pvp")) TlProPanel.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+            send.accept(command);
+            return;
+        }
+        if (name.startsWith("eye_")) {
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "togglevisible");
+            TlProPanel.put(command, "slot", Integer.parseInt(name.substring(4)));
             send.accept(command);
             return;
         }
