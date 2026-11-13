@@ -10,7 +10,7 @@ const Encoding = new NativeClass("System.Text", "Encoding");
 const Type = new NativeClass("System", "Type");
 const Enum = new NativeClass("System", "Enum");
 const port = 38656;
-const limit = 1024;
+const limit = 8192;
 
 let listener;
 let selectRead;

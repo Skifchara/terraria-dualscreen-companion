@@ -29,7 +29,7 @@ import java.util.concurrent.Executors;
  * background thread, and {@link #warm} lets the UI ask for sprites before they are drawn.
  */
 final class SpriteStore {
-    private static final int BATCH = 32;
+    private static final int BATCH = 24;
 
     private final File cacheDir;
     private final File atlasDir;
