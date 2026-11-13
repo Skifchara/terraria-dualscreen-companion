@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased (quality of life)
+
+- Craft tab has three sub-tabs: **Recipes**, **Banners** (claim the banners you earned, one or all) and **Guide**.
+- Guide recipe lookup: pick any item (or press **Recipes** in the item window) to see every recipe that makes it and every recipe
+  that uses it, with ingredients and stations - handy while talking to the Guide.
+- Inventory category chips (All / Weapons / Tools / Armor / Potions / Blocks) dim everything else in the grid.
+- "Stack to chests" button: quick stack into nearby chests from the inventory.
+- Haptic feedback on taps, drags and actions.
+
 ## 1.0.5
 
 - New People tab: team (colour) and PvP toggle, town NPCs with a housed / homeless status, other players.

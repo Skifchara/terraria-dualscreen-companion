@@ -7,6 +7,7 @@ const Main = game.Main;
 const ItemSlot = new NativeClass("Terraria.UI", "ItemSlot");
 const ItemSorting = new NativeClass("Terraria.UI", "ItemSorting");
 const ChestUI = new NativeClass("Terraria.UI", "ChestUI");
+const BannerSystemClass = new NativeClass("Terraria.GameContent", "BannerSystem");
 const WorldGenClass = new NativeClass("Terraria", "WorldGen");
 const RoomFeedback = new NativeClass("Terraria.DataStructures", "RichRoomCheckFeedback");
 const NativeObject = new NativeClass("System", "Object");
@@ -388,6 +389,20 @@ function actWithoutSound(player, request) {
             break;
         case "housing":
             housing(player, request);
+            break;
+        case "bannerclaim": {
+            const banner = request.banner;
+            const amount = request.amount;
+            if (!Number.isInteger(banner) || !Number.isInteger(amount) || banner < 0 || amount < 1 || amount > 99) {
+                throw new Error("Неверный баннер");
+            }
+            BannerSystemClass.RequestBannerClaim(banner, amount);
+            game.refreshRecipes();
+            break;
+        }
+        case "quickstackall":
+            player.QuickStackAllChests();
+            game.refreshRecipes();
             break;
         case "team": {
             const value = request.value;

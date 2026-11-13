@@ -48,6 +48,32 @@ final class Strings {
         put("craft", "Craft", "Крафт", "Fabricación", "Wytwarzanie");
         put("map", "Map", "Карта", "Mapa", "Mapa");
         put("people", "People", "Люди", "Gente", "Ludzie");
+        put("quick_stack", "Stack to chests", "В сундуки рядом", "Apilar en cofres", "Do skrzyń obok");
+        put("filter_0", "All", "Все", "Todo", "Wszystko");
+        put("filter_1", "Weapons", "Оружие", "Armas", "Broń");
+        put("filter_2", "Tools", "Инструменты", "Herramientas", "Narzędzia");
+        put("filter_3", "Armor", "Броня", "Armadura", "Zbroja");
+        put("filter_4", "Potions", "Зелья", "Pociones", "Mikstury");
+        put("filter_5", "Blocks", "Блоки", "Bloques", "Bloki");
+        put("ctab_0", "Recipes", "Рецепты", "Recetas", "Przepisy");
+        put("ctab_1", "Banners", "Баннеры", "Estandartes", "Sztandary");
+        put("ctab_2", "Guide", "Гид", "Guía", "Przewodnik");
+        put("banners_empty", "No banners to claim yet. Every 50 kills of an enemy earn its banner.",
+            "Пока нет баннеров. За каждые 50 убийств врага даётся его баннер.",
+            "Aún no hay estandartes. Cada 50 muertes de un enemigo dan su estandarte.",
+            "Brak sztandarów. Każde 50 zabójstw wroga daje jego sztandar.");
+        put("banner_all", "Claim all", "Забрать все", "Reclamar todo", "Odbierz wszystkie");
+        put("banner_claimed", "claimed", "получен", "reclamado", "odebrano");
+        put("guide_hint", "Tap an item to see every recipe that makes it or uses it.",
+            "Нажми предмет, чтобы увидеть все рецепты, где он создаётся или используется.",
+            "Toca un objeto para ver todas las recetas que lo crean o lo usan.",
+            "Dotknij przedmiotu, aby zobaczyć wszystkie przepisy, w których występuje.");
+        put("guide_talking", "The Guide is listening: pick an item.", "Гид слушает: выбери предмет.",
+            "La Guía te escucha: elige un objeto.", "Przewodnik słucha: wybierz przedmiot.");
+        put("rv_makes", "Makes it", "Создаёт", "Lo crea", "Tworzy");
+        put("rv_uses", "Uses it", "Использует", "Lo usa", "Używa");
+        put("rv_none", "No recipes", "Рецептов нет", "Sin recetas", "Brak przepisów");
+        put("recipes_btn", "Recipes", "Рецепты", "Recetas", "Przepisy");
         put("house_check", "Check room", "Проверить", "Revisar", "Sprawdź");
         put("house_move", "Move in", "Заселить", "Mudar", "Wprowadź");
         put("house_not_enclosed", "Not a closed room here", "Здесь нет замкнутой комнаты", "Aquí no hay habitación cerrada", "Tu nie ma zamkniętego pokoju");

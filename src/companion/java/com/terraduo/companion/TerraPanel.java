@@ -12,6 +12,7 @@ import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
@@ -69,6 +70,14 @@ final class TerraPanel extends View {
     // map
     private Bitmap mapBitmap;
     private MapCache mapCache;
+    // quality-of-life additions: inventory filter, craft sub-tabs, recipe browser
+    private int inventoryFilter;      // 0 all, 1 weapons, 2 tools, 3 armor, 4 potions, 5 blocks
+    private int craftTab;             // 0 recipes, 1 banners, 2 guide (item picker)
+    private float slotCap;            // when > 0 slots are drawn no bigger than this
+    private boolean recipeViewOpen;
+    private JSONObject recipeView;
+    private int recipeViewTab;        // 0 makes, 1 uses
+    private int recipeViewPage;
     private int requestCols, requestRows;
     private long lastCacheTry;
     private boolean mapWanted = true;   // the sampled region has to be refreshed now
@@ -261,6 +270,17 @@ final class TerraPanel extends View {
             scene.update(latest == null ? null : latest.optJSONObject("env"), backgrounds);
         } else if (response.has("entries")) {
             sprites.deliver(response);
+        } else if (response.has("recipesFor")) {
+            recipeView = response.optJSONObject("recipesFor");
+            if (recipeView != null) {
+                JSONArray makes = recipeView.optJSONArray("makes");
+                recipeViewTab = makes != null && makes.length() > 0 ? 0 : 1;
+                JSONArray first = recipeView.optJSONArray(recipeViewTab == 0 ? "makes" : "uses");
+                if (first != null) for (int index = 0; index < first.length(); index++) {
+                    JSONArray entry = first.optJSONArray(index);
+                    if (entry != null && entry.optJSONArray(1) != null) sprites.warm("item:" + entry.optJSONArray(1).optInt(0));
+                }
+            }
         } else if (response.has("tooltip")) {
             if (sheetOpen) sheetInfo = response;
         } else if (response.has("buttons") && response.has("talk")) {
@@ -361,6 +381,7 @@ final class TerraPanel extends View {
 
     /** Ask the mod to play one of the game's own interface sounds (tick, open, close, grab). */
     private void sound(String name) {
+        performHapticFeedback(name.equals("grab") ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.KEYBOARD_TAP);
         JSONObject command = op("sound");
         TlProPanel.put(command, "name", name);
         send.accept(command);
@@ -603,6 +624,8 @@ final class TerraPanel extends View {
         drawEdges(canvas, w, h, s);
         if (latest == null) {
             drawCentered(canvas, Strings.get("open_world"), w / 2f, h / 2f, 34 * s, INK);
+        } else if (recipeViewOpen) {
+            drawRecipeView(canvas, w, h, s);
         } else if (sheetOpen) {
             drawSheet(canvas, w, h, s);
         } else if (talking() && shop() == null && chest() == null) {
@@ -975,7 +998,7 @@ final class TerraPanel extends View {
             case "hud": return "ui:Heart";
             case "lang": return "item:149";
             case "sort": case "chest_sort": return "item:9";
-            case "chest_quick": case "chest_restock": return "item:3509";
+            case "chest_quick": case "chest_restock": case "quickstack": return "item:3509";
             case "sheet_trash": return "ui:Trash";
             default: return null;
         }
@@ -1016,7 +1039,7 @@ final class TerraPanel extends View {
     }
 
     private float slotSize(int w, float s, int columns) {
-        return Math.min(100 * s, (w - 40 * s) / columns - 6 * s);
+        return Math.min(slotCap > 0 ? slotCap : 100 * s, (w - 40 * s) / columns - 6 * s);
     }
 
     private void slotRow(Canvas canvas, int w, float s, float y, int group, int start, int count, String[] labels, int columns) {
@@ -1029,8 +1052,27 @@ final class TerraPanel extends View {
     }
 
     private void drawInventory(Canvas canvas, int w, float s, float top, boolean interactionPane) {
+        slotCap = interactionPane ? 0 : 92 * s;
         float size = slotSize(w, s, 10);
         float y = top + 8 * s - scrollY;
+        if (!interactionPane) {
+            // category chips: everything else in the grid is dimmed
+            float chipGap = 8 * s;
+            float chipWidth = (w - 60 * s - 5 * chipGap) / 6;
+            for (int index = 0; index < 6; index++) {
+                float cx = 30 * s + index * (chipWidth + chipGap);
+                panel(canvas, cx, y, cx + chipWidth, y + 40 * s, index == inventoryFilter ? 0xff347461 : 0x99101a38,
+                    index == inventoryFilter ? GOLD : 0xff5a6ea8, s);
+                String label = Strings.get("filter_" + index);
+                drawCentered(canvas, label, cx + chipWidth / 2, y + 20 * s, fitText(label, 22 * s, chipWidth - 8 * s), INK);
+                Hit hit = new Hit();
+                hit.type = 2;
+                hit.name = "filter_" + index;
+                hit.rect.set(cx, y, cx + chipWidth, y + 40 * s);
+                hits.add(hit);
+            }
+            y += 48 * s;
+        }
         if (interactionPane && shop() != null) y = drawShop(canvas, w, s, y, shop());
         else if (interactionPane && chest() != null) y = drawChest(canvas, w, s, y, chest());
         for (int row = 1; row < 5; row++) {
@@ -1040,6 +1082,10 @@ final class TerraPanel extends View {
         drawText(canvas, Strings.get("coins_ammo"), 30 * s, y + 4 * s, 28 * s, MUTED, true);
         float bx = w - 30 * s;
         button(canvas, "sort", Strings.get("sort"), bx - 170 * s, y - 2 * s, 170 * s, 40 * s, 0xff2a3a6a, s);
+        if (!interactionPane) {
+            button(canvas, "quickstack", Strings.get("quick_stack"), bx - 170 * s - 12 * s - 250 * s, y - 2 * s, 250 * s, 40 * s,
+                0xff2a3a6a, s);
+        }
         y += 44 * s;
         slotRow(canvas, w, s, y, 0, 50, 8, null, 10);
         float trashX = (w - (10 * (size + 6 * s) - 6 * s)) / 2 + 9 * (size + 6 * s);
@@ -1056,6 +1102,7 @@ final class TerraPanel extends View {
             }
         }
         neededHeight = Math.max(neededHeight, y + size - top + scrollY);
+        slotCap = 0;
     }
 
     private String chestTitle(JSONObject chest) {
@@ -1294,6 +1341,168 @@ final class TerraPanel extends View {
     // ---- crafting, laid out like the game: list of craftable results on the left, details on the right
 
     private void drawCraft(Canvas canvas, int w, float s, float top, float bottom) {
+        // sub-tabs: recipes, banners to claim, and the Guide's recipe lookup
+        float tabGap = 10 * s;
+        float tabWidth = (w - 40 * s - 2 * tabGap) / 3;
+        for (int index = 0; index < 3; index++) {
+            float tx = 20 * s + index * (tabWidth + tabGap);
+            boolean active = craftTab == index;
+            panel(canvas, tx, top + 4 * s, tx + tabWidth, top + 56 * s, active ? 0xdd23457a : 0x99101a38, active ? GOLD : 0xff5a6ea8, s);
+            String label = Strings.get("ctab_" + index);
+            if (index == 1) {
+                JSONArray banners = latest == null ? null : latest.optJSONArray("banners");
+                if (banners != null && banners.length() > 0) label += " (" + banners.length() + ")";
+            }
+            drawCentered(canvas, label, tx + tabWidth / 2, top + 30 * s, fitText(label, 28 * s, tabWidth - 12 * s), INK);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "ctab_" + index;
+            hit.rect.set(tx, top + 4 * s, tx + tabWidth, top + 56 * s);
+            hits.add(hit);
+        }
+        if (craftTab == 1) drawBanners(canvas, w, s, top + 64 * s, bottom);
+        else if (craftTab == 2) drawGuidePicker(canvas, w, s, top + 64 * s);
+        else drawCraftRecipes(canvas, w, s, top + 64 * s, bottom);
+    }
+
+    private void drawBanners(Canvas canvas, int w, float s, float top, float bottom) {
+        JSONArray banners = latest == null ? null : latest.optJSONArray("banners");
+        if (banners == null || banners.length() == 0) {
+            for (String line : wrap(Strings.get("banners_empty"), w - 120 * s, 30 * s)) {
+                top += 44 * s;
+                drawCentered(canvas, line, w / 2f, top + (bottom - top) / 3, 30 * s, MUTED);
+            }
+            return;
+        }
+        float y = top + 8 * s - scrollY;
+        button(canvas, "banner_all", Strings.get("banner_all"), w - 30 * s - 260 * s, y, 260 * s, 52 * s, 0xff347461, s);
+        drawText(canvas, Strings.get("ctab_1") + ": " + banners.length(), 30 * s, y + 8 * s, 30 * s, GOLD, true);
+        y += 66 * s;
+        float cell = Math.min(110 * s, (w - 60 * s) / 6 - 8 * s);
+        int columns = Math.max(1, (int) ((w - 60 * s) / (cell + 8 * s)));
+        for (int index = 0; index < banners.length(); index++) {
+            JSONArray banner = banners.optJSONArray(index);
+            if (banner == null) continue;
+            float bx = 30 * s + (index % columns) * (cell + 8 * s);
+            float by = y + (index / columns) * (cell + 8 * s);
+            Bitmap back = sprites.get("ui:InventoryBack");
+            if (back != null) drawSprite(canvas, back, bx, by, cell, cell);
+            else panel(canvas, bx, by, bx + cell, by + cell, 0xcc243a73, 0xff6a80c0, s);
+            drawItem(canvas, new JSONArray().put(banner.optInt(1)).put(banner.optInt(2)).put(0).put(false).put(banner.optString(4)),
+                bx + cell * 0.1f, by + cell * 0.1f, cell * 0.8f);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "banner_" + banner.optInt(0) + "_" + banner.optInt(2);
+            hit.rect.set(bx, by, bx + cell, by + cell);
+            hits.add(hit);
+        }
+        int rows = (banners.length() + columns - 1) / columns;
+        neededHeight = Math.max(neededHeight, 66 * s + rows * (cell + 8 * s) + 20 * s + 8 * s);
+    }
+
+    private void drawGuidePicker(Canvas canvas, int w, float s, float top) {
+        boolean listening = talking() && npcInfo != null && npcInfo.optInt("id") == 22;
+        float y = top + 6 * s;
+        for (String line : wrap(Strings.get(listening ? "guide_talking" : "guide_hint"), w - 60 * s, 28 * s)) {
+            drawText(canvas, line, 30 * s, y, 28 * s, listening ? GOLD : MUTED, true);
+            y += 38 * s;
+        }
+        y += 6 * s;
+        slotCap = 74 * s;
+        float size = slotSize(w, s, 10);
+        for (int row = 1; row < 5; row++) {
+            slotRow(canvas, w, s, y, 0, row * 10, 10, null, 10);
+            y += size + 6 * s;
+        }
+        y += 6 * s;
+        slotRow(canvas, w, s, y, 0, 0, 10, null, 10);
+        slotCap = 0;
+    }
+
+    /** The Guide's recipe lookup: what makes an item and what it is used in. */
+    private void drawRecipeView(Canvas canvas, int w, int h, float s) {
+        hits.clear();
+        fill.setColor(0xbb02060f);
+        canvas.drawRect(0, h * 0.0f, w, h, fill);
+        Hit outside = new Hit();
+        outside.type = 9;
+        outside.rect.set(0, 0, w, h);
+        hits.add(outside);
+        float left = 24 * s;
+        float right = w - 24 * s;
+        float top = 70 * s;
+        float bottom = h - 90 * s;
+        panel(canvas, left, top, right, bottom, 0xf0101a38, 0xff8ea2d8, s);
+        Hit body = new Hit();
+        body.type = 8;
+        body.rect.set(left, top, right, bottom);
+        hits.add(body);
+        String title = recipeView == null ? "…" : recipeView.optString("name");
+        drawText(canvas, title, left + 30 * s, top + 20 * s, 38 * s, GOLD, true);
+        button(canvas, "rv_close", "x", right - 100 * s, top + 14 * s, 76 * s, 56 * s, 0xff2a3a6a, s);
+        JSONArray makes = recipeView == null ? null : recipeView.optJSONArray("makes");
+        JSONArray uses = recipeView == null ? null : recipeView.optJSONArray("uses");
+        int makesCount = makes == null ? 0 : makes.length();
+        int usesCount = uses == null ? 0 : uses.length();
+        float tabY = top + 84 * s;
+        float tabW = (right - left - 90 * s) / 2;
+        button(canvas, "rv_makes", Strings.get("rv_makes") + " (" + makesCount + ")", left + 30 * s, tabY, tabW, 56 * s,
+            recipeViewTab == 0 ? 0xff347461 : 0xff2a3a6a, s);
+        button(canvas, "rv_uses", Strings.get("rv_uses") + " (" + usesCount + ")", left + 60 * s + tabW, tabY, tabW, 56 * s,
+            recipeViewTab == 1 ? 0xff347461 : 0xff2a3a6a, s);
+        JSONArray list = recipeViewTab == 0 ? makes : uses;
+        float rowTop = tabY + 70 * s;
+        float rowHeight = 110 * s;
+        int perPage = Math.max(1, (int) ((bottom - rowTop - 70 * s) / rowHeight));
+        int total = list == null ? 0 : list.length();
+        int pages = Math.max(1, (total + perPage - 1) / perPage);
+        recipeViewPage = Math.max(0, Math.min(pages - 1, recipeViewPage));
+        if (total == 0) {
+            drawCentered(canvas, recipeView == null ? "…" : Strings.get("rv_none"), w / 2f, rowTop + 60 * s, 32 * s, MUTED);
+        }
+        for (int row = 0; row < perPage; row++) {
+            int index = recipeViewPage * perPage + row;
+            if (list == null || index >= total) break;
+            JSONArray entry = list.optJSONArray(index);
+            if (entry == null) continue;
+            float y = rowTop + row * rowHeight;
+            panel(canvas, left + 24 * s, y, right - 24 * s, y + rowHeight - 8 * s, 0x99101a38, 0xff5a6ea8, s);
+            JSONArray result = entry.optJSONArray(1);
+            Bitmap back = sprites.get("ui:InventoryBack");
+            if (back != null) drawSprite(canvas, back, left + 38 * s, y + 10 * s, 72 * s, 72 * s);
+            drawItem(canvas, result, left + 38 * s + 7 * s, y + 17 * s, 58 * s);
+            String name = result == null ? "" : result.optString(4);
+            drawText(canvas, name + (result != null && result.optInt(1) > 1 ? "  ×" + result.optInt(1) : ""), left + 126 * s, y + 8 * s, 28 * s, INK, true);
+            String station = entry.optString(3);
+            if (!station.isEmpty()) {
+                String text = station;
+                drawText(canvas, text, right - 40 * s - measure(text, 22 * s), y + 12 * s, 22 * s, 0xffffe9a8, true);
+            }
+            JSONArray ingredients = entry.optJSONArray(2);
+            float ix = left + 126 * s;
+            for (int need = 0; ingredients != null && need < ingredients.length() && ix < right - 110 * s; need++) {
+                JSONArray ingredient = ingredients.optJSONArray(need);
+                if (ingredient == null) continue;
+                Bitmap icon = sprites.get("item:" + ingredient.optInt(2));
+                if (icon != null) {
+                    float fit = Math.min(40 * s / icon.getWidth(), 40 * s / icon.getHeight());
+                    drawSprite(canvas, icon, ix, y + 54 * s, icon.getWidth() * fit, icon.getHeight() * fit);
+                }
+                boolean enough = ingredient.optInt(3) >= ingredient.optInt(1);
+                String count = ingredient.optInt(1) + "";
+                drawText(canvas, count, ix + 42 * s, y + 60 * s, 22 * s, enough ? 0xff7be07b : 0xffe06b6b, true);
+                ix += 46 * s + measure(count, 22 * s) + 14 * s;
+            }
+        }
+        if (pages > 1) {
+            float by = bottom - 66 * s;
+            button(canvas, "rv_prev", "‹", left + 30 * s, by, 90 * s, 52 * s, recipeViewPage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+            drawCentered(canvas, (recipeViewPage + 1) + " / " + pages, w / 2f, by + 26 * s, 28 * s, INK);
+            button(canvas, "rv_next", "›", right - 120 * s, by, 90 * s, 52 * s, recipeViewPage + 1 < pages ? 0xff2a3a6a : 0xff1a2238, s);
+        }
+    }
+
+    private void drawCraftRecipes(Canvas canvas, int w, float s, float top, float bottom) {
         JSONObject list = latest == null ? null : latest.optJSONObject("recipes");
         JSONArray entries = list == null ? null : list.optJSONArray("entries");
         if (entries == null || entries.length() == 0) {
@@ -1597,6 +1806,11 @@ final class TerraPanel extends View {
         canvas.translate(shake, 0);
         if (!dragSource) drawItem(canvas, data, x + size * 0.1f, y + size * 0.1f, size * 0.8f);
         canvas.restore();
+        if (inventoryFilter != 0 && pane == 0 && group == 0 && index >= 10 && index < 50 && data != null && typeOf(data) != 0
+            && data.optInt(5) != inventoryFilter) {
+            fill.setColor(0xb0060b1a);
+            canvas.drawRect(x, y, x + size, y + size, fill);
+        }
         if (data != null && typeOf(data) == 0 && label != null) {
             drawCentered(canvas, label, x + size / 2, y + size / 2, Math.max(14, 18 * s), 0x99b5c5d4);
         } else if (label != null && group == 0 && index < 10) {
@@ -1784,6 +1998,7 @@ final class TerraPanel extends View {
         }
         if (inventory && wear) actions.add(new String[]{"equip", Strings.get("equip")});
         if (inventory && usable) actions.add(new String[]{"use", Strings.get("use")});
+        actions.add(new String[]{"recipes", Strings.get("recipes_btn")});
         actions.add(new String[]{"favorite", Strings.get(favorited ? "unfavorite" : "favorite")});
         if (inventory && data.optInt(1) >= 2) {
             actions.add(new String[]{"split1", Strings.get("split_one")});
@@ -2268,7 +2483,7 @@ final class TerraPanel extends View {
             case 2: pressButton(hit.name); break;
             case 3: selectedRecipe = hit.index; break;
             case 5: shopSelection = hit.index; break;
-            case 9: sheetOpen = false; splitMode = 0; sound("close"); break;
+            case 9: sheetOpen = false; recipeViewOpen = false; splitMode = 0; sound("close"); break;
             case 4: break;
             case 8: break;
             default: tapSlot(hit, longPress); break;
@@ -2287,6 +2502,43 @@ final class TerraPanel extends View {
         if (!name.startsWith("sheet_") && !name.startsWith("chest_")) sound("tick");
         if (name.startsWith("sheet_")) {
             sheetAction(name.substring(6));
+            return;
+        }
+        if (name.startsWith("filter_")) {
+            inventoryFilter = Integer.parseInt(name.substring(7));
+            return;
+        }
+        if (name.startsWith("ctab_")) {
+            craftTab = Integer.parseInt(name.substring(5));
+            scrollY = 0;
+            return;
+        }
+        if (name.equals("quickstack")) {
+            act("quickstackall", 0, 0, null);
+            return;
+        }
+        if (name.startsWith("banner_")) {
+            if (name.equals("banner_all")) {
+                JSONArray banners = latest == null ? null : latest.optJSONArray("banners");
+                for (int index = 0; banners != null && index < banners.length(); index++) {
+                    JSONArray banner = banners.optJSONArray(index);
+                    if (banner != null) claimBanner(banner.optInt(0), Math.min(99, banner.optInt(2)));
+                }
+            } else {
+                String[] parts = name.split("_");
+                claimBanner(Integer.parseInt(parts[1]), 1);
+            }
+            return;
+        }
+        if (name.startsWith("rv_")) {
+            switch (name) {
+                case "rv_close": recipeViewOpen = false; sound("close"); break;
+                case "rv_makes": recipeViewTab = 0; recipeViewPage = 0; break;
+                case "rv_uses": recipeViewTab = 1; recipeViewPage = 0; break;
+                case "rv_prev": recipeViewPage = Math.max(0, recipeViewPage - 1); break;
+                case "rv_next": recipeViewPage++; break;
+                default: break;
+            }
             return;
         }
         if (name.startsWith("house_")) {
@@ -2412,6 +2664,10 @@ final class TerraPanel extends View {
 
     private void tapSlot(Hit hit, boolean longPress) {
         if (latest == null) return;
+        if (pane == 2 && craftTab == 2 && hit.group == 0 && !sheetOpen) {
+            showRecipesFor(typeOf(slotData(0, hit.index)));
+            return;
+        }
         long tapTime = SystemClock.uptimeMillis();
         JSONArray tapped = slotData(hit.group, hit.index);
         if (splitMode == 0 && hit.group == 0 && lastTapGroup == 0 && lastTapIndex == hit.index && tapTime - lastTapAt < 340
@@ -2480,8 +2736,32 @@ final class TerraPanel extends View {
         }
     }
 
+    private void claimBanner(int banner, int amount) {
+        JSONObject command = op("act");
+        TlProPanel.put(command, "kind", "bannerclaim");
+        TlProPanel.put(command, "banner", banner);
+        TlProPanel.put(command, "amount", amount);
+        send.accept(command);
+    }
+
+    /** Ask the mod for every recipe that makes / uses an item (the Guide's recipe lookup) and open the browser. */
+    private void showRecipesFor(int type) {
+        if (type <= 0) return;
+        JSONObject command = op("recipesfor");
+        TlProPanel.put(command, "type", type);
+        send.accept(command);
+        recipeView = null;
+        recipeViewOpen = true;
+        recipeViewTab = 0;
+        recipeViewPage = 0;
+    }
+
     private void sheetAction(String name) {
         switch (name) {
+            case "recipes":
+                showRecipesFor(typeOf(slotData(sheetGroup, sheetIndex)));
+                sheetOpen = false;
+                break;
             case "sell":
                 trade("sell", sheetIndex);
                 sheetOpen = false;

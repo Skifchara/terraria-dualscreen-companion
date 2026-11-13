@@ -241,6 +241,9 @@ function runRequest(player, request, now) {
         case "npc":
             send({ ...actions.npc(), canShop: shop.canOpen(player) });
             break;
+        case "recipesfor":
+            send(game.recipesFor(player, request.type));
+            break;
         case "sound":
             game.playSound(String(request.name));
             respond(player, request);

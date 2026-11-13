@@ -32,11 +32,37 @@ function setHousing(result) {
     lastHousing = Object.assign({ at: Date.now() }, result);
 }
 
+// 0 other, 1 weapon, 2 tool, 3 armour / accessory, 4 potion / food, 5 block / material. Cached per type.
+const categories = new Map();
+
+function categoryOf(item) {
+    const type = item.type;
+    if (categories.has(type)) {
+        return categories.get(type);
+    }
+    let category = 0;
+    try {
+        if (item.pick > 0 || item.axe > 0 || item.hammer > 0) {
+            category = 2;
+        } else if (item.damage > 0 && !(item.ammo > 0)) {
+            category = 1;
+        } else if (item.headSlot >= 0 || item.bodySlot >= 0 || item.legSlot >= 0 || item.accessory) {
+            category = 3;
+        } else if (item.consumable && (item.buffType > 0 || item.healLife > 0 || item.healMana > 0)) {
+            category = 4;
+        } else if (item.createTile >= 0 || item.createWall >= 0 || item.material) {
+            category = 5;
+        }
+    } catch (_) { /* leave as other */ }
+    categories.set(type, category);
+    return category;
+}
+
 function itemState(item) {
     if (!item || item.type === 0 || item.stack <= 0) {
-        return [0, 0, 0, false, ""];
+        return [0, 0, 0, false, "", 0];
     }
-    return [item.type, item.stack, item.prefix, item.favorited, item.get_Name()];
+    return [item.type, item.stack, item.prefix, item.favorited, item.get_Name(), categoryOf(item)];
 }
 
 function slots(array, count) {
@@ -106,6 +132,90 @@ function refreshRecipes() {
     Recipe.GetThroughDelayedFindRecipes();
 }
 
+function describeRecipe(id, recipe, player) {
+    const ingredients = slots(recipe.requiredItem, 32).filter((item) => item[0] !== 0).map((item) => {
+        let have = -1;
+        try {
+            have = player.CountItem(item[0], 99999);
+        } catch (_) { /* leave unknown */ }
+        return [item[4], item[1], item[0], have];
+    });
+    let tile = "";
+    try {
+        if (recipe.requiredTile >= 0) {
+            tile = String(Recipe.GetRequiredTileName(recipe.requiredTile));
+        }
+    } catch (_) { /* no station name */ }
+    const needs = [];
+    for (const [flag, label] of [["needWater", "water"], ["needHoney", "honey"], ["needLava", "lava"],
+        ["needSnowBiome", "snow"]]) {
+        try {
+            if (recipe[flag]) {
+                needs.push(label);
+            }
+        } catch (_) { /* flag missing */ }
+    }
+    return [id, itemState(recipe.createItem), ingredients, tile, needs];
+}
+
+// Every recipe that makes an item, and every recipe that uses it as an ingredient (the Guide's "what can I craft with this").
+function recipesFor(player, type) {
+    const makes = [];
+    const uses = [];
+    if (!Number.isInteger(type) || type <= 0) {
+        throw new Error("Неверный предмет");
+    }
+    const recipes = Main.recipe;
+    const total = Math.min(Recipe.numRecipes, recipes.length);
+    for (let id = 0; id < total && (makes.length < 40 || uses.length < 40); id++) {
+        const recipe = recipes[id];
+        if (!recipe || !recipe.createItem || recipe.createItem.type === 0) {
+            continue;
+        }
+        if (recipe.createItem.type === type && makes.length < 40) {
+            makes.push(describeRecipe(id, recipe, player));
+            continue;
+        }
+        if (uses.length < 40) {
+            const required = recipe.requiredItem;
+            for (let k = 0; k < Math.min(required.length, 32); k++) {
+                const entry = required[k];
+                if (!entry || entry.type === 0) {
+                    break;
+                }
+                if (entry.type === type) {
+                    uses.push(describeRecipe(id, recipe, player));
+                    break;
+                }
+            }
+        }
+    }
+    let name = "";
+    try {
+        name = String(Lang.GetItemNameValue(type));
+    } catch (_) { /* no name */ }
+    return { recipesFor: { type, name, makes, uses } };
+}
+
+// Banners the player has earned (every 50 kills) and can claim: [bannerId, itemType, claimable, kills, name]
+const BannerSystem = new NativeClass("Terraria.GameContent", "BannerSystem");
+
+function readBanners() {
+    const result = [];
+    try {
+        const counts = BannerSystem.GetClaimableBannerCounts();
+        for (let id = 0; id < counts.length && result.length < 120; id++) {
+            const claimable = counts[id];
+            if (claimable > 0) {
+                const itemType = safe(() => BannerSystem.BannerToItem(id), 0);
+                result.push([id, itemType, claimable, safe(() => BannerSystem.GetKillCount(id), 0),
+                    itemType > 0 ? String(safe(() => Lang.GetItemNameValue(itemType), "")) : ""]);
+            }
+        }
+    } catch (_) { /* no banner system */ }
+    return result;
+}
+
 function readRecipes(page) {
     refreshRecipes();
     const player = Main.get_LocalPlayer();
@@ -119,29 +229,7 @@ function readRecipes(page) {
         const id = indices[index];
         const recipe = recipes[id];
         if (recipe) {
-            const ingredients = slots(recipe.requiredItem, 32).filter((item) => item[0] !== 0).map((item) => {
-                let have = -1;
-                try {
-                    have = player.CountItem(item[0], 99999);
-                } catch (_) { /* leave unknown */ }
-                return [item[4], item[1], item[0], have];
-            });
-            let tile = "";
-            try {
-                if (recipe.requiredTile >= 0) {
-                    tile = String(Recipe.GetRequiredTileName(recipe.requiredTile));
-                }
-            } catch (_) { /* no station name */ }
-            const needs = [];
-            for (const [flag, label] of [["needWater", "water"], ["needHoney", "honey"], ["needLava", "lava"],
-                ["needSnowBiome", "snow"]]) {
-                try {
-                    if (recipe[flag]) {
-                        needs.push(label);
-                    }
-                } catch (_) { /* flag missing */ }
-            }
-            result.push([id, itemState(recipe.createItem), ingredients, tile, needs]);
+            result.push(describeRecipe(id, recipe, player));
         }
     }
     return { entries: result, total, page: offset / 24, focus: safe(() => Main.get_focusRecipe(), -1) };
@@ -503,6 +591,8 @@ function snapshot(player, pane, page) {
         state.unlocked = Array.from({ length: 10 }, (_, index) => player.IsItemSlotUnlockedAndUsable(index));
     } else if (pane === "craft") {
         state.recipes = readRecipes(Number.isInteger(page) && page >= 0 ? page : 0);
+        state.banners = readBanners();
+        state.guideMenu = !!safe(() => Main.get_InGuideCraftMenu(), false);
     }
     return state;
 }
@@ -542,4 +632,4 @@ function backgrounds() {
     return result;
 }
 
-export { setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
