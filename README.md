@@ -17,6 +17,14 @@ crafting, chests, buffs, map and a background that follows where you are — bui
   <img src="docs/screenshots/05_item_window_en.png" width="49%" alt="Item window">
   <img src="docs/screenshots/04_map_en.png" width="49%" alt="Map">
 </p>
+<p align="center">
+  <img src="docs/screenshots/02_equipment_en.png" width="49%" alt="Equipment">
+  <img src="docs/screenshots/08_people_en.png" width="49%" alt="People: team, housing">
+</p>
+<p align="center">
+  <img src="docs/screenshots/09_banners_en.png" width="49%" alt="Banners">
+  <img src="docs/screenshots/10_emotes_en.png" width="49%" alt="Emotes">
+</p>
 
 ## What it does
 
@@ -26,6 +34,10 @@ crafting, chests, buffs, map and a background that follows where you are — bui
 - **Edge gestures while dragging** — top: drop · bottom: use / equip / summon · right: trash · left: favourite.
 - **Equipment, crafting, chests and banks**, hotbar, health and mana bars (tap to flip to hearts and stars), buffs and debuffs,
   info accessories (watch, depth meter, compass, weather radio).
+- **People** — team and PvP, town NPCs with a room check / move-in, armour sets (loadouts) and total defence.
+- **Chat and emotes** — the game's chat log with an on-screen keyboard (EN / RU, slash commands) and all 151 emote bubbles.
+- **Nearby** — talk to (and trade with) any town NPC close to you, and look up recipes with the Guide on the second screen.
+- **Banners** — claim earned banners from the Craft tab; buffs and pets can be tapped, accessory / armour / wings visibility toggled.
 - **Map** with smooth panning and pinch zoom, town NPC heads, boss icons with health.
 - **Hide HUD** removes the game's own HUD from the top screen; the controller then drives the companion
   (L1 / R1 hotbar, Y cycles the tabs).

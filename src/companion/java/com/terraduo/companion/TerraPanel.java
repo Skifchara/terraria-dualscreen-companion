@@ -1741,11 +1741,12 @@ final class TerraPanel extends View {
         float cell = (w - 80 * s) / columns;
         float cellH = cell * frameH / frameW;
         int perPage = 40;
+        float pitch = Math.max(cellH + 8 * s, (bottom - top - 84 * s) / 5);
         for (int slot = 0; slot < perPage; slot++) {
             int id = emotePage * perPage + slot;
             if (id >= 151) break;
             float x = 40 * s + (slot % columns) * cell;
-            float y = top + (slot / columns) * (cellH + 8 * s);
+            float y = top + (slot / columns) * pitch + (pitch - cellH) / 2 - 4 * s;
             // the white bubble, then the emote on top of it
             srcRect.set(frameW, 0, frameW * 2, frameH);
             dstRect.set(x + 6 * s, y, x + cell - 6 * s, y + cellH);
