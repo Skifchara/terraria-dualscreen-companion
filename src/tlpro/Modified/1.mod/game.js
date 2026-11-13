@@ -733,7 +733,7 @@ function readInfo(player) {
         const icons = display.DisplayIcons;
         info.accessories = [];
         for (let i = 0; i < Math.min(display.numInfoAccessories, lines.length, icons.length); i++) {
-            if (lines[i]) info.accessories.push([icons[i], String(lines[i])]);
+            if (lines[i]) info.accessories.push([icons[i], String(lines[i]), safe(() => Number(display.InfoState[i]), 0)]);
         }
         if (info.accessories.length) return info;
     } catch (_) { /* keep the basic readouts if this game version has a different GUI */ }

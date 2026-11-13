@@ -957,15 +957,6 @@ final class TerraPanel extends View {
             if (zones != null && zones.length() > 0) line += "  ·  " + Strings.zone(zones.optString(0));
             drawText(canvas, line, 510 * s, 12 * s, 22 * s, MUTED, true);
         }
-        String info = infoLine();
-        if (!info.isEmpty()) {
-            float width = Math.max(24 * s, w - 1085 * s);
-            infoText.setTextSize(24 * s);
-            String preview = android.text.TextUtils.ellipsize(info, infoText, width - 21 * s,
-                android.text.TextUtils.TruncateAt.END).toString();
-            drawText(canvas, preview + " ›", 510 * s, 48 * s, fitText(preview + " ›", 19 * s, width), 0xffffe9a8, true);
-            addButtonHit("info", 506 * s, 42 * s, 510 * s + width, 84 * s);
-        }
         float bx = w - 30 * s;
         bx = button(canvas, "lang", Strings.language().code.toUpperCase(java.util.Locale.ROOT),
             bx - 100 * s, 12 * s, 100 * s, 66 * s, 0xff2a3a6a, s);
@@ -2501,6 +2492,7 @@ final class TerraPanel extends View {
         }
         drawCenteredBox(canvas, message, w / 2f, h - 212 * s, 30 * s, color);
         drawBuffs(canvas, w, h, s);
+        drawInfoCorner(canvas, w, h, s);
     }
 
     private boolean feedbackActive() {
@@ -2956,22 +2948,87 @@ final class TerraPanel extends View {
             current.equals(code) ? 0xff347461 : 0xff2a3a6a, s);
     }
 
+    /** What the info accessories show, one entry per reading: [icon index (-1 none), text, state]. */
+    private java.util.ArrayList<Object[]> infoEntries() {
+        java.util.ArrayList<Object[]> list = new java.util.ArrayList<>();
+        JSONObject info = latest == null ? null : latest.optJSONObject("info");
+        if (info == null) return list;
+        JSONArray accessories = info.optJSONArray("accessories");
+        if (accessories != null && accessories.length() > 0) {
+            for (int index = 0; index < accessories.length(); index++) {
+                JSONArray entry = accessories.optJSONArray(index);
+                if (entry != null && !entry.optString(1).isEmpty()) list.add(new Object[]{entry.optInt(0, -1), entry.optString(1), entry.optInt(2)});
+            }
+            return list;
+        }
+        String line = infoLine();
+        if (!line.isEmpty()) for (String part : line.split("  ·  ")) list.add(new Object[]{-1, part, 0});
+        return list;
+    }
+
+    private void drawInfoRow(Canvas canvas, Object[] entry, float x, float y, float maxWidth, float rowHeight, float s, boolean rightAlign) {
+        String text = (String) entry[1];
+        int icon = (Integer) entry[0];
+        int state = (Integer) entry[2];
+        int color = state == 1 ? MUTED : state == 2 ? 0xff9be07b : INK;
+        float iconSize = rowHeight * 0.86f;
+        float size = fitText(text, rowHeight * 0.66f, maxWidth - (icon >= 0 ? iconSize + 8 * s : 0));
+        float textWidth = measure(text, size);
+        float total = textWidth + (icon >= 0 ? iconSize + 8 * s : 0);
+        float left = rightAlign ? x - total : x;
+        if (icon >= 0) {
+            Bitmap picture = sprites.get("infoicon:" + icon);
+            if (picture != null) {
+                float fit = Math.min(iconSize / picture.getWidth(), iconSize / picture.getHeight());
+                drawSprite(canvas, picture, left + (iconSize - picture.getWidth() * fit) / 2,
+                    y + (rowHeight - picture.getHeight() * fit) / 2, picture.getWidth() * fit, picture.getHeight() * fit);
+            }
+            left += iconSize + 8 * s;
+        }
+        drawText(canvas, text, left, y + (rowHeight - size) / 2 - 2 * s, size, color, true);
+    }
+
+    /** Bottom right, opposite the buffs: the first readings (depth meter, speedometer...) and a button for the full list. */
+    private void drawInfoCorner(Canvas canvas, int w, int h, float s) {
+        java.util.ArrayList<Object[]> entries = infoEntries();
+        if (entries.isEmpty()) return;
+        float rowH = 33 * s;
+        float right = w - 24 * s;
+        float top = h - 290 * s;
+        boolean more = entries.size() > 2;
+        if (more) {
+            float bw = 84 * s;
+            button(canvas, "info", "+" + (entries.size() - 2), right - bw, top, bw, 66 * s, 0xff2a3a6a, s);
+            right -= bw + 12 * s;
+        }
+        float maxWidth = w * 0.46f;
+        for (int index = 0; index < Math.min(2, entries.size()); index++) {
+            drawInfoRow(canvas, entries.get(index), right, top + index * rowH, maxWidth, rowH, s, true);
+        }
+        if (!more) addButtonHit("info", right - maxWidth, top, w - 24 * s, top + 66 * s);
+    }
+
+    /** The full list of info readings with their icons, live. */
     private void drawInfoPicker(Canvas canvas, int w, int h, float s) {
         hits.clear();
         addButtonHit("dismiss_overlay", 0, 0, w, h);
-        float left = 75 * s;
-        float top = 176 * s;
+        java.util.ArrayList<Object[]> entries = infoEntries();
+        float left = 40 * s;
+        float top = 150 * s;
         float width = w - 2 * left;
-        String[] lines = infoLine().split("  ·  ");
-        float height = (Math.min(7, (lines.length + 1) / 2) * 56 + 92) * s;
+        int rows = Math.max(1, (Math.min(16, entries.size()) + 1) / 2);
+        float rowH = 66 * s;
+        float height = rows * rowH + 150 * s;
         panel(canvas, left, top, left + width, top + height, 0xff101a38, GOLD, s);
-        float column = (width - 48 * s) / 2;
-        for (int i = 0; i < Math.min(14, lines.length); i++) {
-            drawText(canvas, lines[i], left + 24 * s + (i % 2) * column, top + (22 + (i / 2) * 56) * s,
-                fitText(lines[i], 23 * s, column - 18 * s), INK, true);
+        drawText(canvas, Strings.get("info_title"), left + 28 * s, top + 18 * s, 34 * s, GOLD, true);
+        float column = (width - 56 * s) / 2;
+        for (int index = 0; index < Math.min(16, entries.size()); index++) {
+            float cx = left + 28 * s + (index % 2) * column;
+            float cy = top + 76 * s + (index / 2) * rowH;
+            panel(canvas, cx, cy, cx + column - 12 * s, cy + rowH - 8 * s, 0x99101a38, 0xff3a4a7a, s);
+            drawInfoRow(canvas, entries.get(index), cx + 12 * s, cy + 2 * s, column - 40 * s, rowH - 12 * s, s, false);
         }
-        button(canvas, "dismiss_overlay", Strings.get("close"), left + 24 * s, top + height - 65 * s,
-            200 * s, 48 * s, 0xff2a3a6a, s);
+        button(canvas, "dismiss_overlay", Strings.get("close"), left + 28 * s, top + height - 74 * s, 220 * s, 60 * s, 0xff2a3a6a, s);
     }
 
     // ---- drawing helpers
