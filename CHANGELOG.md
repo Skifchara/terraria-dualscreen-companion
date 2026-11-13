@@ -12,6 +12,13 @@
 - Smoother scenery: background layers fade in and the old scene fades out when the biome changes.
 - Bigger buttons everywhere (top bar, filters, shop, equipment, people, chat, recipes, map) and a re-laid-out People list.
 - Fixes: the chat Send key was squeezed to zero width; sprite requests longer than 1 KB were refused by the mod.
+- Bestiary (People tab): the game's bestiary as a grid with habitat-coloured backdrops, kill counts, silhouettes for creatures not met
+  yet, filters (all / enemies / bosses / critters / town / found, and a habitat switch) and a detail page with stats, flavour text,
+  habitats and drops - each part unlocked by the same rules as in the game. Swipe scrolls the grid.
+- Pause button next to the chat button (freezes the game; released automatically if the companion stops polling).
+- Long-press on the map names the block under the finger (only for explored tiles).
+- Info accessory readings (depth meter, speedometer, ...) bottom right opposite the buffs, with a button for the full live list with icons.
+- Hotbar selection drawn like the game: golden plate and an enlarged slot.
 - Nearby tab: when a town NPC is close, a **Nearby** tab slides in with Talk (starts the conversation, and so the shop) and, for the
   Guide, a shortcut to the recipe lookup.
 - The UI atlas extractor now colors single-palette pages without an alpha plane (the emote sheet, ...).

@@ -37,6 +37,8 @@ crafting, chests, buffs, map and a background that follows where you are — bui
 - **People** — team and PvP, town NPCs with a room check / move-in, armour sets (loadouts) and total defence.
 - **Chat and emotes** — the game's chat log with an on-screen keyboard (EN / RU, slash commands) and all 151 emote bubbles.
 - **Nearby** — talk to (and trade with) any town NPC close to you, and look up recipes with the Guide on the second screen.
+- **Bestiary** — the game's own entries with kill counts, stats, drops and habitats, unlocked the way the game unlocks them.
+- **Pause**, block names on long-press on the map, and info accessory readings with a full list.
 - **Banners** — claim earned banners from the Craft tab; buffs and pets can be tapped, accessory / armour / wings visibility toggled.
 - **Map** with smooth panning and pinch zoom, town NPC heads, boss icons with health.
 - **Hide HUD** removes the game's own HUD from the top screen; the controller then drives the companion

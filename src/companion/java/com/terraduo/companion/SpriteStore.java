@@ -44,7 +44,7 @@ final class SpriteStore {
     private volatile int revision;
 
     SpriteStore(Context context) {
-        cacheDir = new File(context.getFilesDir(), "sprites7");
+        cacheDir = new File(context.getFilesDir(), "sprites8");
         //noinspection ResultOfMethodCallIgnored
         cacheDir.mkdirs();
         File external = context.getExternalFilesDir(null);
