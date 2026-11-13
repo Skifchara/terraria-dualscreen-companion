@@ -545,7 +545,7 @@ function unlockStateOf(entry, npc, kills, seen, talked, kind) {
 
 // Habitat tags and the portrait background of an entry; read a few entries per call so the list never stalls the game.
 function metaOf(entry, text) {
-    const meta = { bg: -1, tags: [] };
+    const meta = { bg: "", tags: [] };
     const info = entry.Info;
     const count = info.get_Count();
     for (let index = 0; index < count; index++) {
@@ -560,14 +560,10 @@ function metaOf(entry, text) {
         try {
             meta.tags.push(text(String(element._key)));
         } catch (_) { /* no name */ }
-        if (meta.bg < 0) {
+        if (!meta.bg) {
             try {
-                const path = String(element._backgroundImagePath);
-                const match = /MapBG(\d+)/.exec(path);
-                if (match) {
-                    meta.bg = Number(match[1]) - 1;
-                }
-            } catch (_) { /* no background */ }
+                meta.bg = String(element._key);
+            } catch (_) { /* no key */ }
         }
     }
     return meta;
@@ -648,7 +644,7 @@ function bestiaryInfo(id) {
     const kind = npc.townNPC ? 2 : npc.boss ? 1 : safe(() => npc.CountsAsACritter, false) ? 3 : 0;
     const result = { id, name: String(Lang.GetNPCNameValue(id)), kills,
         state: unlockStateOf(entry, npc, kills, seen, talked, kind), biomes: [], drops: [],
-        flavor: "", catches: 0, stats: null, bg: -1 };
+        flavor: "", catches: 0, stats: null, bg: "" };
     const info = entry.Info;
     const count = info.get_Count();
     for (let index = 0; index < count; index++) {
@@ -680,11 +676,8 @@ function bestiaryInfo(id) {
                 if (key.length > 0) {
                     result.biomes.push(text(key));
                 }
-                if (result.bg < 0) {
-                    const match = /MapBG(\d+)/.exec(String(element._backgroundImagePath));
-                    if (match) {
-                        result.bg = Number(match[1]) - 1;
-                    }
+                if (!result.bg) {
+                    result.bg = key;
                 }
                 continue;
             }

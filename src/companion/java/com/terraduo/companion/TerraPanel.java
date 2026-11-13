@@ -703,7 +703,7 @@ final class TerraPanel extends View {
         } else if (talking() && shop() == null && chest() == null) {
             drawDialogue(canvas, w, s, contentTop, contentBottom);
         }
-        if (infoOpen && !infoLine().isEmpty()) drawInfoPicker(canvas, w, h, s);
+        if (infoOpen && !infoEntries().isEmpty()) drawInfoPicker(canvas, w, h, s);
         if (languagePicker) drawLanguagePicker(canvas, w, h, s);
         drawFlashes(canvas, w, h);
         postInvalidateDelayed(33);
@@ -1630,7 +1630,7 @@ final class TerraPanel extends View {
             if (cy + cardH < top - 40 * s || cy > top + 1200 * s) continue;   // off screen
             boolean known = entry.optInt(3) != 0;
             panel(canvas, cx, cy, cx + cardW, cy + cardH, known ? 0xcc1b2a55 : 0xcc0a1124, known ? 0xff5a6ea8 : 0xff2a3556, s);
-            drawBackdrop(canvas, entry.isNull(8) ? -1 : entry.optInt(8, -1), cx + 4 * s, cy + 4 * s, cx + cardW - 4 * s, cy + 112 * s, known ? 170 : 70);
+            drawBackdrop(canvas, entry.isNull(8) ? "" : entry.optString(8), cx + 4 * s, cy + 4 * s, cx + cardW - 4 * s, cy + 112 * s, known ? 170 : 70);
             Bitmap sprite = sprites.get("npc:" + entry.optInt(0));
             if (sprite != null) {
                 float fit = Math.min((cardW - 24 * s) / sprite.getWidth(), 96 * s / sprite.getHeight());
@@ -1656,20 +1656,31 @@ final class TerraPanel extends View {
         neededHeight = Math.max(neededHeight, y - top + scrollY + ((shown + columns - 1) / columns) * (cardH + gap) + 20 * s);
     }
 
-    /** The habitat picture the game puts behind a creature (cover-fitted into the box, fading downward is left to the frame). */
-    private void drawBackdrop(Canvas canvas, int id, float left, float top, float right, float bottom, int alpha) {
-        if (id < 0) return;
-        Bitmap picture = sprites.get("mapbg:" + id);
-        if (picture == null) return;
-        float scale = Math.max((right - left) / picture.getWidth(), (bottom - top) / picture.getHeight());
-        float sw = (right - left) / scale;
-        float sh = (bottom - top) / scale;
-        srcRect.set((int) ((picture.getWidth() - sw) / 2), (int) ((picture.getHeight() - sh) / 2),
-            (int) ((picture.getWidth() + sw) / 2), (int) ((picture.getHeight() + sh) / 2));
-        backdrop.setFilterBitmap(false);
+    /** A habitat-coloured gradient behind a creature (the key is the game's habitat name, e.g. Bestiary_Biomes.TheCorruption). */
+    private void drawBackdrop(Canvas canvas, String key, float left, float top, float right, float bottom, int alpha) {
+        if (key == null || key.isEmpty()) return;
+        String k = key.toLowerCase(java.util.Locale.ROOT);
+        int a;
+        int b;
+        if (k.contains("crim")) { a = 0xff5a1018; b = 0xffa8383a; }
+        else if (k.contains("corrupt")) { a = 0xff3a2a58; b = 0xff7a5aa0; }
+        else if (k.contains("hallow")) { a = 0xff8ec6ff; b = 0xffffd0f0; }
+        else if (k.contains("jungle")) { a = 0xff2f7a3a; b = 0xffc2f0a0; }
+        else if (k.contains("snow") || k.contains("ice")) { a = 0xff6f9ad8; b = 0xffe8f4ff; }
+        else if (k.contains("desert")) { a = 0xff7ab8e8; b = 0xfff4e2a8; }
+        else if (k.contains("ocean") || k.contains("beach")) { a = 0xff2a78c8; b = 0xffcdeeff; }
+        else if (k.contains("underworld") || k.contains("hell")) { a = 0xff200808; b = 0xffb02808; }
+        else if (k.contains("dungeon")) { a = 0xff0c1230; b = 0xff2a3a6a; }
+        else if (k.contains("mushroom")) { a = 0xff0a1a3a; b = 0xff2a4a8a; }
+        else if (k.contains("space") || k.contains("sky")) { a = 0xff02030c; b = 0xff1c2a78; }
+        else if (k.contains("cavern") || k.contains("underground") || k.contains("marble") || k.contains("granite") || k.contains("hive")) { a = 0xff2a2018; b = 0xff54402c; }
+        else if (k.contains("night")) { a = 0xff070b24; b = 0xff1d2a5c; }
+        else { a = 0xff4a8ede; b = 0xffbfe3ff; }
+        backdrop.setShader(new android.graphics.LinearGradient(0, top, 0, bottom, a, b, android.graphics.Shader.TileMode.CLAMP));
         backdrop.setAlpha(alpha);
-        dstRect.set(left, top, right, bottom);
-        canvas.drawBitmap(picture, srcRect, dstRect, backdrop);
+        canvas.drawRect(left, top, right, bottom, backdrop);
+        backdrop.setShader(null);
+        backdrop.setAlpha(255);
     }
 
     private static String percent(double rate) {
@@ -1710,7 +1721,7 @@ final class TerraPanel extends View {
         float px = left + 24 * s;
         float py = top + 24 * s;
         panel(canvas, px, py, px + 190 * s, py + 190 * s, 0xcc0a1124, 0xff5a6ea8, s);
-        drawBackdrop(canvas, info.optInt("bg", -1), px + 4 * s, py + 4 * s, px + 186 * s, py + 186 * s, state >= 1 ? 230 : 90);
+        drawBackdrop(canvas, info.optString("bg"), px + 4 * s, py + 4 * s, px + 186 * s, py + 186 * s, state >= 1 ? 230 : 90);
         Bitmap sprite = sprites.get("npc:" + info.optInt("id"));
         if (sprite != null) {
             float fit = Math.min(170 * s / sprite.getWidth(), 170 * s / sprite.getHeight());
@@ -2949,8 +2960,27 @@ final class TerraPanel extends View {
     }
 
     /** What the info accessories show, one entry per reading: [icon index (-1 none), text, state]. */
+    private long fakeInfoChecked;
+    private boolean fakeInfo;
+
+    /** Developer aid: an empty file named "fakeinfo" in the app's external folder shows sample readings (to test the layout). */
+    private boolean fakeInfoOn() {
+        long now = SystemClock.uptimeMillis();
+        if (now - fakeInfoChecked > 1500) {
+            fakeInfoChecked = now;
+            java.io.File dir = getContext().getExternalFilesDir(null);
+            fakeInfo = dir != null && new java.io.File(dir, "fakeinfo").exists();
+        }
+        return fakeInfo;
+    }
+
     private java.util.ArrayList<Object[]> infoEntries() {
         java.util.ArrayList<Object[]> list = new java.util.ArrayList<>();
+        if (fakeInfoOn()) {
+            String[] sample = {"6:42 AM", "Sunny", "Moon 3/4", "12 mph", "East 840 ft", "250 ft below", "0 DPS", "Kills 54", "Rare creature nearby", "No metal"};
+            for (int index = 0; index < sample.length; index++) list.add(new Object[]{index, sample[index], index == 9 ? 1 : 0});
+            return list;
+        }
         JSONObject info = latest == null ? null : latest.optJSONObject("info");
         if (info == null) return list;
         JSONArray accessories = info.optJSONArray("accessories");
@@ -3019,7 +3049,7 @@ final class TerraPanel extends View {
         int rows = Math.max(1, (Math.min(16, entries.size()) + 1) / 2);
         float rowH = 66 * s;
         float height = rows * rowH + 150 * s;
-        panel(canvas, left, top, left + width, top + height, 0xff101a38, GOLD, s);
+        panel(canvas, left, top, left + width, top + height, 0xf0101a38, 0xff8ea2d8, s);
         drawText(canvas, Strings.get("info_title"), left + 28 * s, top + 18 * s, 34 * s, GOLD, true);
         float column = (width - 56 * s) / 2;
         for (int index = 0; index < Math.min(16, entries.size()); index++) {
