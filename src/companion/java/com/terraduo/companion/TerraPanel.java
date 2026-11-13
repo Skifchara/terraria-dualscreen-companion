@@ -1709,22 +1709,23 @@ final class TerraPanel extends View {
             }
             ky += 74 * s;
         }
-        float unit = (right - left - 32 * s - 5 * keyGap) / 11;
+        // bottom row: shift, language, five symbols, space, backspace and send, sized to fill the row exactly
+        float unit = (right - left - 32 * s - 9 * keyGap) / 12.7f;
         float kx = left + 16 * s;
-        button(canvas, "key_shift", "Aa", kx, ky, unit * 1.5f, 68 * s, keyShift ? 0xff347461 : 0xff2a3a6a, s);
-        kx += unit * 1.5f + keyGap;
-        button(canvas, "key_lang", keyLayout == 0 ? "EN" : "RU", kx, ky, unit * 1.5f, 68 * s, 0xff2a3a6a, s);
-        kx += unit * 1.5f + keyGap;
+        button(canvas, "key_shift", "Aa", kx, ky, unit * 1.3f, 68 * s, keyShift ? 0xff347461 : 0xff2a3a6a, s);
+        kx += unit * 1.3f + keyGap;
+        button(canvas, "key_lang", keyLayout == 0 ? "EN" : "RU", kx, ky, unit * 1.3f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 1.3f + keyGap;
         String[] extra = {"/", ".", ",", "!", "?"};
         for (String symbol : extra) {
             button(canvas, "key_" + symbol, symbol, kx, ky, unit * 0.9f, 68 * s, 0xff2a3a6a, s);
             kx += unit * 0.9f + keyGap;
         }
-        button(canvas, "key_space", "", kx, ky, unit * 2.6f, 68 * s, 0xff2a3a6a, s);
-        kx += unit * 2.6f + keyGap;
-        button(canvas, "key_back", "<-", kx, ky, unit * 1.2f, 68 * s, 0xff2a3a6a, s);
-        kx += unit * 1.2f + keyGap;
-        button(canvas, "key_send", Strings.get("chat_send"), kx, ky, right - 16 * s - kx, 68 * s, 0xff347461, s);
+        button(canvas, "key_space", "", kx, ky, unit * 2.4f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 2.4f + keyGap;
+        button(canvas, "key_back", "<-", kx, ky, unit * 1.3f, 68 * s, 0xff2a3a6a, s);
+        kx += unit * 1.3f + keyGap;
+        button(canvas, "key_send", Strings.get("chat_send"), kx, ky, unit * 1.9f, 68 * s, 0xff347461, s);
     }
 
     private void drawEmotes(Canvas canvas, int w, float s, float top, float bottom) {
