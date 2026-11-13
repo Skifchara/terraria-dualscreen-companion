@@ -1653,7 +1653,8 @@ final class TerraPanel extends View {
             hit.rect.set(cx, cy, cx + cardW, cy + cardH);
             hits.add(hit);
         }
-        neededHeight = Math.max(neededHeight, y - top + scrollY + ((shown + columns - 1) / columns) * (cardH + gap) + 20 * s);
+        if (shown == 0) drawText(canvas, Strings.get("bst_empty"), 40 * s, y + 10 * s, 30 * s, MUTED, true);
+        neededHeight = Math.max(neededHeight, y - top + scrollY + Math.max(1, (shown + columns - 1) / columns) * (cardH + gap) + 20 * s);
     }
 
     /** A habitat-coloured gradient behind a creature (the key is the game's habitat name, e.g. Bestiary_Biomes.TheCorruption). */
