@@ -1358,11 +1358,36 @@ final class TerraPanel extends View {
         int[][] rows = {{1, 0, 10}, {1, 10, 10}, {2, 0, 10}, {3, 0, 5}, {4, 0, 5}};
         for (int row = 0; row < rows.length; row++) {
             drawText(canvas, Strings.get(titles[row]), 30 * s, y, 26 * s, MUTED, true);
+            if (row == 3) petToggles(canvas, w, s, y);
             y += 32 * s;
             slotRow(canvas, w, s, y, rows[row][0], rows[row][1], rows[row][2], rows[row][0] >= 3 ? utility : labels, 10);
             y += size + 12 * s;
         }
         neededHeight = Math.max(neededHeight, y - top + scrollY);
+    }
+
+    /** Whether the pet (kind 1) or light pet (kind 2) is out: an item in its slot and the matching buff active. */
+    private boolean petShown(int kind) {
+        JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
+        for (int index = 0; buffs != null && index < buffs.length(); index++) {
+            JSONArray buff = buffs.optJSONArray(index);
+            if (buff != null && buff.optInt(6) == kind) return true;
+        }
+        return false;
+    }
+
+    /** Buttons on the "Pets and mounts" header to send the pet / light pet away or call it back. */
+    private void petToggles(Canvas canvas, int w, float s, float y) {
+        float bw = 150 * s;
+        float bh = 34 * s;
+        for (int kind = 1; kind <= 2; kind++) {
+            if (typeOf(slotData(3, kind - 1)) == 0) continue;
+            boolean shown = petShown(kind);
+            String key = (kind == 1 ? "pet_" : "light_") + (shown ? "shown" : "hidden");
+            float bx = w - 20 * s - (3 - kind) * (bw + 8 * s) + 8 * s;
+            button(canvas, "petswitch_" + (kind - 1), Strings.get(key), bx, y - 4 * s, bw, bh,
+                shown ? 0xff347461 : 0xff2a3a6a, s);
+        }
     }
 
     /** One line about the last housing check / move-in the game reported. */
@@ -2932,6 +2957,13 @@ final class TerraPanel extends View {
             JSONObject command = op("act");
             TlProPanel.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
             if (!name.equals("pvp")) TlProPanel.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+            send.accept(command);
+            return;
+        }
+        if (name.startsWith("petswitch_")) {
+            JSONObject command = op("act");
+            TlProPanel.put(command, "kind", "togglepet");
+            TlProPanel.put(command, "which", Integer.parseInt(name.substring(10)));
             send.accept(command);
             return;
         }

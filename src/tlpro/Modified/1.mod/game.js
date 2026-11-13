@@ -482,7 +482,7 @@ function buffName(type) {
     return buffNames.get(type);
 }
 
-// Active buffs and debuffs: [type, ticks left, isDebuff, localised name, isPet, slot]
+// Active buffs and debuffs: [type, ticks left, isDebuff, localised name, isPet, slot, 1 pet / 2 light pet / 0 other]
 function readBuffs(player) {
     const result = [];
     try {
@@ -490,7 +490,7 @@ function readBuffs(player) {
             const type = player.buffType[index];
             if (type > 0) {
                 result.push([type, player.buffTime[index], !!Main.debuff[type], buffName(type),
-                    !!(Main.vanityPet[type] || Main.lightPet[type]), index]);
+                    !!(Main.vanityPet[type] || Main.lightPet[type]), index, Main.vanityPet[type] ? 1 : Main.lightPet[type] ? 2 : 0]);
             }
         }
     } catch (_) { /* buffs unavailable */ }

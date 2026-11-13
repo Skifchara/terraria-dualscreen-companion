@@ -486,6 +486,14 @@ function actWithoutSound(player, request) {
             }
             break;
         }
+        case "togglepet":
+            // Show or hide the pet (0) or light pet (1) of the equipment slots, as the game's own buttons do.
+            if (request.which === 1) {
+                player.ToggleLight();
+            } else {
+                player.TogglePet();
+            }
+            break;
         case "mount":
             player.QuickMount();
             break;
