@@ -8,6 +8,8 @@
 - Inventory category chips (All / Weapons / Tools / Armor / Potions / Blocks) dim everything else in the grid.
 - "Stack to chests" button: quick stack into nearby chests from the inventory.
 - Haptic feedback on taps, drags and actions.
+- Buttons, filter chips and craft sub-tabs got icons: game sprites where a fitting one exists, small drawn symbols (banner, magnifier,
+  house, star, arrows) otherwise.
 
 ## 1.0.5
 

@@ -220,6 +220,7 @@ final class TerraPanel extends View {
         }
         // every request carries the HUD flag: the mod hides/restores the game HUD from it
         int requestedPane = preloadPane >= 0 ? preloadPane : pane;
+        if (preloadPane < 0 && pane == 2 && craftTab == 2) requestedPane = 0;   // the item picker needs the whole inventory
         TlProPanel.put(result, "pane", PANES[requestedPane == INTERACTION ? 0 : requestedPane]);
         TlProPanel.put(result, "page", preloadPane >= 0 ? 0 : recipePage);
         preloadPane = -1;
@@ -969,8 +970,10 @@ final class TerraPanel extends View {
 
     private void buttonLabel(Canvas canvas, String name, String label, float x, float y, float width, float height, float size, float s) {
         String icon = buttonSprite(name);
-        float iconSize = icon == null ? 0 : Math.min(32 * s, height * .53f);
-        float gap = icon == null ? 0 : 6 * s;
+        String symbol = icon == null ? buttonSymbol(name) : null;
+        boolean decorated = icon != null || symbol != null;
+        float iconSize = !decorated ? 0 : Math.min(32 * s, height * .53f);
+        float gap = !decorated ? 0 : 6 * s;
         size = fitText(label, size, Math.max(1, width - iconSize - gap - 12 * s));
         float labelWidth = measure(label, size);
         float start = x + (width - iconSize - gap - labelWidth) / 2;
@@ -984,6 +987,7 @@ final class TerraPanel extends View {
                 drawSprite(canvas, sprite, start + (iconSize - sw) / 2, y + (height - sh) / 2, sw, sh);
             }
         }
+        if (symbol != null) drawSymbol(canvas, symbol, start + iconSize / 2, y + height / 2, iconSize * 0.8f);
         drawCentered(canvas, label, start + iconSize + gap + labelWidth / 2, y + height / 2, size, INK);
     }
 
@@ -1000,8 +1004,95 @@ final class TerraPanel extends View {
             case "sort": case "chest_sort": return "item:9";
             case "chest_quick": case "chest_restock": case "quickstack": return "item:3509";
             case "sheet_trash": return "ui:Trash";
+            case "sheet_use": return "item:28";
+            case "sheet_equip": return "item:89";
+            case "sheet_deposit": return "item:48";
+            case "sheet_recipes": case "rv_makes": case "ctab_0": return "item:36";
+            case "rv_uses": return "item:3";
+            case "ctab_2": return "npchead:1";
+            case "filter_0": return "item:48";
+            case "filter_1": return "item:4";
+            case "filter_2": return "item:1";
+            case "filter_3": return "item:89";
+            case "filter_4": return "item:28";
+            case "filter_5": return "item:3";
+            case "pvp": return "item:4";
             default: return null;
         }
+    }
+
+    /** Buttons without a fitting game sprite get a small symbol drawn in the same slot. */
+    private String buttonSymbol(String name) {
+        if (name.startsWith("house_check")) return "magnifier";
+        if (name.startsWith("house_move")) return "house";
+        if (name.equals("ctab_1") || name.startsWith("banner_")) return "flag";
+        switch (name) {
+            case "sheet_favorite": return "star";
+            case "sheet_drop": return "arrowup";
+            case "sheet_take": return "arrowdown";
+            case "sheet_split1": case "sheet_split2": return "split";
+            default: return null;
+        }
+    }
+
+    private final Path symbolPath = new Path();
+
+    private void drawSymbol(Canvas canvas, String symbol, float cx, float cy, float size) {
+        float r = size / 2;
+        fill.setColor(GOLD);
+        stroke.setColor(GOLD);
+        stroke.setStrokeWidth(Math.max(2f, size * 0.1f));
+        symbolPath.reset();
+        switch (symbol) {
+            case "flag":
+                canvas.drawLine(cx - r * 0.7f, cy - r, cx - r * 0.7f, cy + r, stroke);
+                symbolPath.moveTo(cx - r * 0.7f, cy - r);
+                symbolPath.lineTo(cx + r, cy - r * 0.45f);
+                symbolPath.lineTo(cx - r * 0.7f, cy + r * 0.1f);
+                symbolPath.close();
+                canvas.drawPath(symbolPath, fill);
+                break;
+            case "magnifier":
+                stroke.setStyle(Paint.Style.STROKE);
+                canvas.drawCircle(cx - r * 0.2f, cy - r * 0.2f, r * 0.6f, stroke);
+                canvas.drawLine(cx + r * 0.25f, cy + r * 0.25f, cx + r * 0.95f, cy + r * 0.95f, stroke);
+                break;
+            case "house":
+                symbolPath.moveTo(cx - r, cy);
+                symbolPath.lineTo(cx, cy - r);
+                symbolPath.lineTo(cx + r, cy);
+                symbolPath.lineTo(cx + r * 0.7f, cy);
+                symbolPath.lineTo(cx + r * 0.7f, cy + r);
+                symbolPath.lineTo(cx - r * 0.7f, cy + r);
+                symbolPath.lineTo(cx - r * 0.7f, cy);
+                symbolPath.close();
+                canvas.drawPath(symbolPath, fill);
+                break;
+            case "star":
+                drawStar(canvas, cx - r, cy - r, size);
+                break;
+            case "arrowup":
+            case "arrowdown": {
+                float dir = symbol.equals("arrowup") ? -1 : 1;
+                symbolPath.moveTo(cx, cy + dir * r);
+                symbolPath.lineTo(cx - r * 0.9f, cy - dir * r * 0.1f);
+                symbolPath.lineTo(cx - r * 0.35f, cy - dir * r * 0.1f);
+                symbolPath.lineTo(cx - r * 0.35f, cy - dir * r);
+                symbolPath.lineTo(cx + r * 0.35f, cy - dir * r);
+                symbolPath.lineTo(cx + r * 0.35f, cy - dir * r * 0.1f);
+                symbolPath.lineTo(cx + r * 0.9f, cy - dir * r * 0.1f);
+                symbolPath.close();
+                canvas.drawPath(symbolPath, fill);
+                break;
+            }
+            case "split":
+                canvas.drawRect(cx - r, cy - r * 0.5f, cx - r * 0.1f, cy + r * 0.5f, fill);
+                canvas.drawRect(cx + r * 0.1f, cy - r * 0.5f, cx + r, cy + r * 0.5f, fill);
+                break;
+            default:
+                break;
+        }
+        stroke.setStyle(Paint.Style.STROKE);
     }
 
     private void drawTabs(Canvas canvas, int w, float s) {
@@ -1063,8 +1154,7 @@ final class TerraPanel extends View {
                 float cx = 30 * s + index * (chipWidth + chipGap);
                 panel(canvas, cx, y, cx + chipWidth, y + 40 * s, index == inventoryFilter ? 0xff347461 : 0x99101a38,
                     index == inventoryFilter ? GOLD : 0xff5a6ea8, s);
-                String label = Strings.get("filter_" + index);
-                drawCentered(canvas, label, cx + chipWidth / 2, y + 20 * s, fitText(label, 22 * s, chipWidth - 8 * s), INK);
+                buttonLabel(canvas, "filter_" + index, Strings.get("filter_" + index), cx, y, chipWidth, 40 * s, 22 * s, s);
                 Hit hit = new Hit();
                 hit.type = 2;
                 hit.name = "filter_" + index;
@@ -1353,7 +1443,7 @@ final class TerraPanel extends View {
                 JSONArray banners = latest == null ? null : latest.optJSONArray("banners");
                 if (banners != null && banners.length() > 0) label += " (" + banners.length() + ")";
             }
-            drawCentered(canvas, label, tx + tabWidth / 2, top + 30 * s, fitText(label, 28 * s, tabWidth - 12 * s), INK);
+            buttonLabel(canvas, "ctab_" + index, label, tx, top + 4 * s, tabWidth, 52 * s, 28 * s, s);
             Hit hit = new Hit();
             hit.type = 2;
             hit.name = "ctab_" + index;
