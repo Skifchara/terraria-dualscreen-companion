@@ -736,10 +736,10 @@ final class TerraPanel extends View {
     private void drawBuffs(Canvas canvas, int w, int h, float s) {
         JSONArray buffs = latest == null ? null : latest.optJSONArray("buffs");
         if (buffs == null || buffs.length() == 0) return;
-        float size = 58 * s;
+        float size = 66 * s;
         float gap = 8 * s;
         float x = 24 * s;
-        float y = h - 288 * s;
+        float y = h - 290 * s;
         for (int index = 0; index < buffs.length() && x + size < w - 20 * s; index++) {
             JSONArray buff = buffs.optJSONArray(index);
             if (buff == null) continue;
@@ -911,7 +911,7 @@ final class TerraPanel extends View {
         }
         String info = infoLine();
         if (!info.isEmpty()) {
-            float width = Math.max(24 * s, w - 850 * s);
+            float width = Math.max(24 * s, w - 980 * s);
             infoText.setTextSize(24 * s);
             String preview = android.text.TextUtils.ellipsize(info, infoText, width - 21 * s,
                 android.text.TextUtils.TruncateAt.END).toString();
@@ -920,10 +920,10 @@ final class TerraPanel extends View {
         }
         float bx = w - 30 * s;
         bx = button(canvas, "lang", Strings.language().code.toUpperCase(java.util.Locale.ROOT),
-            bx - 88 * s, 20 * s, 88 * s, 52 * s, 0xff2a3a6a, s);
-        button(canvas, "chat", "", bx - 200 * s - 12 * s - 64 * s, 20 * s, 64 * s, 52 * s, chatOpen ? 0xff347461 : 0xff2a3a6a, s);
+            bx - 100 * s, 12 * s, 100 * s, 66 * s, 0xff2a3a6a, s);
+        button(canvas, "chat", "", bx - 210 * s - 12 * s - 84 * s, 12 * s, 84 * s, 66 * s, chatOpen ? 0xff347461 : 0xff2a3a6a, s);
         boolean can = latest != null && latest.optBoolean("hudAvailable");
-        button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 200 * s, 20 * s, 200 * s, 52 * s,
+        button(canvas, "hud", Strings.get(hideRequested ? "show_hud" : "hide_hud"), bx - 210 * s, 12 * s, 210 * s, 66 * s,
             can ? (hideRequested ? 0xff347461 : 0xff2a3a6a) : 0xff1a2238, s);
     }
 
@@ -1196,16 +1196,16 @@ final class TerraPanel extends View {
             float chipWidth = (w - 60 * s - 5 * chipGap) / 6;
             for (int index = 0; index < 6; index++) {
                 float cx = 30 * s + index * (chipWidth + chipGap);
-                panel(canvas, cx, y, cx + chipWidth, y + 40 * s, index == inventoryFilter ? 0xff347461 : 0x99101a38,
+                panel(canvas, cx, y, cx + chipWidth, y + 58 * s, index == inventoryFilter ? 0xff347461 : 0x99101a38,
                     index == inventoryFilter ? GOLD : 0xff5a6ea8, s);
-                buttonLabel(canvas, "filter_" + index, Strings.get("filter_" + index), cx, y, chipWidth, 40 * s, 22 * s, s);
+                buttonLabel(canvas, "filter_" + index, Strings.get("filter_" + index), cx, y, chipWidth, 58 * s, 22 * s, s);
                 Hit hit = new Hit();
                 hit.type = 2;
                 hit.name = "filter_" + index;
-                hit.rect.set(cx, y, cx + chipWidth, y + 40 * s);
+                hit.rect.set(cx, y, cx + chipWidth, y + 58 * s);
                 hits.add(hit);
             }
-            y += 48 * s;
+            y += 68 * s;
         }
         if (interactionPane && shop() != null) y = drawShop(canvas, w, s, y, shop());
         else if (interactionPane && chest() != null) y = drawChest(canvas, w, s, y, chest());
@@ -1215,12 +1215,12 @@ final class TerraPanel extends View {
         }
         drawText(canvas, Strings.get("coins_ammo"), 30 * s, y + 4 * s, 28 * s, MUTED, true);
         float bx = w - 30 * s;
-        button(canvas, "sort", Strings.get("sort"), bx - 170 * s, y - 2 * s, 170 * s, 40 * s, 0xff2a3a6a, s);
+        button(canvas, "sort", Strings.get("sort"), bx - 190 * s, y - 2 * s, 190 * s, 62 * s, 0xff2a3a6a, s);
         if (!interactionPane) {
-            button(canvas, "quickstack", Strings.get("quick_stack"), bx - 170 * s - 12 * s - 250 * s, y - 2 * s, 250 * s, 40 * s,
+            button(canvas, "quickstack", Strings.get("quick_stack"), bx - 190 * s - 12 * s - 280 * s, y - 2 * s, 280 * s, 62 * s,
                 0xff2a3a6a, s);
         }
-        y += 44 * s;
+        y += 70 * s;
         slotRow(canvas, w, s, y, 0, 50, 8, null, 10);
         float trashX = (w - (10 * (size + 6 * s) - 6 * s)) / 2 + 9 * (size + 6 * s);
         JSONArray trash = slotData(6, 0);
@@ -1285,8 +1285,8 @@ final class TerraPanel extends View {
         float width = w - 2 * left;
         String name = shop.optString("name", Strings.get("merchant"));
         drawText(canvas, name, left, y + 8 * s, fitText(name, 28 * s, width - 185 * s), GOLD, true);
-        button(canvas, "shop_close", Strings.get("close_shop"), w - left - 170 * s, y, 170 * s, 46 * s, 0xff7a2a2f, s);
-        y += 58 * s;
+        button(canvas, "shop_close", Strings.get("close_shop"), w - left - 190 * s, y, 190 * s, 64 * s, 0xff7a2a2f, s);
+        y += 76 * s;
         JSONArray items = shop.optJSONArray("items");
         float size = slotSize(w, s, 10);
         float cell = size + 6 * s;
@@ -1313,9 +1313,9 @@ final class TerraPanel extends View {
             if (price != null) label += "  ·  " + formatShopPrice(price);
             drawText(canvas, label, left, y + 8 * s, fitText(label, 23 * s, width - 190 * s), INK, true);
             if (price != null) {
-                button(canvas, "shop_buy", Strings.get("buy") + " ×1", w - left - 170 * s, y, 170 * s, 48 * s, 0xff2c6a3c, s);
+                button(canvas, "shop_buy", Strings.get("buy") + " ×1", w - left - 190 * s, y, 190 * s, 64 * s, 0xff2c6a3c, s);
             }
-            y += 60 * s;
+            y += 76 * s;
         }
         drawText(canvas, Strings.get("inventory"), left, y, 26 * s, MUTED, true);
         return y + 42 * s;
@@ -1349,15 +1349,15 @@ final class TerraPanel extends View {
             int defense = latest == null ? 0 : latest.optInt("defense");
             int loadout = latest == null ? 0 : latest.optInt("loadout");
             Bitmap shield = sprites.get("item:938");
-            float bh = 52 * s;
+            float bh = 66 * s;
             fill.setColor(0x66101a38);
             canvas.drawRect(20 * s, y, w - 20 * s, y + bh, fill);
-            if (shield != null) drawSprite(canvas, shield, 30 * s, y + 4 * s, 44 * s, 44 * s);
-            drawText(canvas, Strings.get("armor_total") + ": " + defense, 84 * s, y + 8 * s, 32 * s, GOLD, true);
-            drawText(canvas, Strings.get("loadout"), w * 0.5f - 90 * s, y + 12 * s, 24 * s, MUTED, true);
+            if (shield != null) drawSprite(canvas, shield, 30 * s, y + 10 * s, 46 * s, 46 * s);
+            drawText(canvas, Strings.get("armor_total") + ": " + defense, 84 * s, y + 16 * s, 32 * s, GOLD, true);
+            drawText(canvas, Strings.get("loadout"), w * 0.5f - 150 * s, y + 20 * s, 24 * s, MUTED, true);
             for (int set = 0; set < 3; set++) {
-                float bx = w - 20 * s - (3 - set) * 76 * s;
-                button(canvas, "loadout_" + set, Integer.toString(set + 1), bx, y + 2 * s, 68 * s, bh - 4 * s,
+                float bx = w - 20 * s - (3 - set) * 92 * s;
+                button(canvas, "loadout_" + set, Integer.toString(set + 1), bx, y + 3 * s, 84 * s, bh - 6 * s,
                     set == loadout ? 0xff347461 : 0xff2a3a6a, s);
             }
             y += bh + 8 * s;
@@ -1367,12 +1367,13 @@ final class TerraPanel extends View {
         String[] titles = {"armor", "vanity", "dyes", "pets", "pet_dyes"};
         int[][] rows = {{1, 0, 10}, {1, 10, 10}, {2, 0, 10}, {3, 0, 5}, {4, 0, 5}};
         for (int row = 0; row < rows.length; row++) {
-            drawText(canvas, Strings.get(titles[row]), 30 * s, y, 26 * s, MUTED, true);
+            boolean tall = row == 0 || row == 3;
+            drawText(canvas, Strings.get(titles[row]), 30 * s, tall ? y + 10 * s : y, 26 * s, MUTED, true);
             if (row == 3) petToggles(canvas, w, s, y);
-            y += 32 * s;
+            if (row == 0) wingsToggle(canvas, w, s, y);
+            y += tall ? 62 * s : 32 * s;
             slotRow(canvas, w, s, y, rows[row][0], rows[row][1], rows[row][2], rows[row][0] >= 3 ? utility : labels, 10);
             if (row == 0) eyeButtons(canvas, w, s, y);
-            if (row == 0) wingsToggle(canvas, w, s, y - 32 * s);
             y += size + 12 * s;
         }
         neededHeight = Math.max(neededHeight, y - top + scrollY);
@@ -1384,7 +1385,7 @@ final class TerraPanel extends View {
         float size = slotSize(w, s, 10);
         float total = 10 * (size + 6 * s) - 6 * s;
         float x0 = (w - total) / 2;
-        float eye = 34 * s;
+        float eye = 36 * s;
         JSONArray look = latest == null ? null : latest.optJSONArray("hideLook");
         for (int slot = 0; slot <= 9; slot++) {
             if (typeOf(slotData(1, slot)) == 0) continue;
@@ -1397,7 +1398,7 @@ final class TerraPanel extends View {
             Hit hit = new Hit();
             hit.type = 2;
             hit.name = slot < 3 ? "look_armor_" + slot : "eye_" + slot;
-            hit.rect.set(ex - 4 * s, ey - 2 * s, ex + eye + 4 * s, ey + eye + 4 * s);
+            hit.rect.set(ex - 16 * s, ey - 2 * s, ex + eye + 2 * s, ey + eye + 18 * s);
             hits.add(hit);
         }
     }
@@ -1406,8 +1407,8 @@ final class TerraPanel extends View {
     private void wingsToggle(Canvas canvas, int w, float s, float y) {
         JSONArray look = latest == null ? null : latest.optJSONArray("hideLook");
         boolean off = look != null && look.optBoolean(3);
-        button(canvas, "look_wings", Strings.get(off ? "wings_hidden" : "wings_shown"), w - 20 * s - 170 * s, y - 4 * s, 170 * s,
-            34 * s, off ? 0xff2a3a6a : 0xff347461, s);
+        button(canvas, "look_wings", Strings.get(off ? "wings_hidden" : "wings_shown"), w - 20 * s - 220 * s, y, 220 * s,
+            54 * s, off ? 0xff2a3a6a : 0xff347461, s);
     }
 
     /** Whether the pet (kind 1) or light pet (kind 2) is out: an item in its slot and the matching buff active. */
@@ -1422,14 +1423,14 @@ final class TerraPanel extends View {
 
     /** Buttons on the "Pets and mounts" header to send the pet / light pet away or call it back. */
     private void petToggles(Canvas canvas, int w, float s, float y) {
-        float bw = 150 * s;
-        float bh = 34 * s;
+        float bw = 220 * s;
+        float bh = 54 * s;
         for (int kind = 1; kind <= 2; kind++) {
             if (typeOf(slotData(3, kind - 1)) == 0) continue;
             boolean shown = petShown(kind);
             String key = (kind == 1 ? "pet_" : "light_") + (shown ? "shown" : "hidden");
-            float bx = w - 20 * s - (3 - kind) * (bw + 8 * s) + 8 * s;
-            button(canvas, "petswitch_" + (kind - 1), Strings.get(key), bx, y - 4 * s, bw, bh,
+            float bx = w - 20 * s - (3 - kind) * (bw + 10 * s) + 10 * s;
+            button(canvas, "petswitch_" + (kind - 1), Strings.get(key), bx, y, bw, bh,
                 shown ? 0xff347461 : 0xff2a3a6a, s);
         }
     }
@@ -1478,7 +1479,7 @@ final class TerraPanel extends View {
             hits.add(hit);
         }
         y += 74 * s;
-        button(canvas, "pvp", "PvP: " + Strings.get(pvp ? "on" : "off"), 30 * s, y, 260 * s, 62 * s, pvp ? 0xff8a2a2f : 0xff2a3a6a, s);
+        button(canvas, "pvp", "PvP: " + Strings.get(pvp ? "on" : "off"), 30 * s, y, 280 * s, 70 * s, pvp ? 0xff8a2a2f : 0xff2a3a6a, s);
         y += 82 * s;
         drawText(canvas, Strings.get("npcs_town"), 30 * s, y, 28 * s, GOLD, true);
         String housing = housingText();
@@ -1488,22 +1489,22 @@ final class TerraPanel extends View {
         for (int index = 0; npcs != null && index < npcs.length(); index++) {
             JSONArray npc = npcs.optJSONArray(index);
             if (npc == null) continue;
-            panel(canvas, 30 * s, y, w - 30 * s, y + 62 * s, 0x99101a38, 0xff5a6ea8, s);
+            panel(canvas, 30 * s, y, w - 30 * s, y + 84 * s, 0x99101a38, 0xff5a6ea8, s);
             Bitmap head = npc.optInt(0) >= 0 ? sprites.get("npchead:" + npc.optInt(0)) : null;
             if (head != null) {
                 float fit = Math.min(48 * s / head.getWidth(), 48 * s / head.getHeight());
-                drawSprite(canvas, head, 44 * s, y + 31 * s - head.getHeight() * fit / 2, head.getWidth() * fit, head.getHeight() * fit);
+                drawSprite(canvas, head, 44 * s, y + 42 * s - head.getHeight() * fit / 2, head.getWidth() * fit, head.getHeight() * fit);
             }
-            drawText(canvas, npc.optString(1), 110 * s, y + 14 * s, 30 * s, INK, true);
+            drawText(canvas, npc.optString(1), 110 * s, y + 8 * s, 30 * s, INK, true);
             boolean homeless = npc.optBoolean(2);
             String status = Strings.get(homeless ? "homeless" : "has_home");
-            drawText(canvas, status, w - 430 * s - measure(status, 24 * s), y + 17 * s, 24 * s, homeless ? 0xffffb06a : 0xff7be07b, true);
+            drawText(canvas, status, 110 * s, y + 48 * s, 24 * s, homeless ? 0xffffb06a : 0xff7be07b, true);
             int npcIndex = npc.optInt(8, -1);
             if (npcIndex >= 0) {
-                button(canvas, "house_check_" + npcIndex, Strings.get("house_check"), w - 410 * s, y + 5 * s, 180 * s, 52 * s, 0xff2a3a6a, s);
-                button(canvas, "house_move_" + npcIndex, Strings.get("house_move"), w - 220 * s, y + 5 * s, 180 * s, 52 * s, 0xff347461, s);
+                button(canvas, "house_check_" + npcIndex, Strings.get("house_check"), w - 450 * s, y + 9 * s, 205 * s, 66 * s, 0xff2a3a6a, s);
+                button(canvas, "house_move_" + npcIndex, Strings.get("house_move"), w - 235 * s, y + 9 * s, 205 * s, 66 * s, 0xff347461, s);
             }
-            y += 70 * s;
+            y += 94 * s;
         }
         if (npcs == null || npcs.length() == 0) {
             drawText(canvas, "-", 40 * s, y, 28 * s, MUTED, true);
@@ -1540,22 +1541,22 @@ final class TerraPanel extends View {
         for (int index = 0; index < 3; index++) {
             float tx = 20 * s + index * (tabWidth + tabGap);
             boolean active = craftTab == index;
-            panel(canvas, tx, top + 4 * s, tx + tabWidth, top + 56 * s, active ? 0xdd23457a : 0x99101a38, active ? GOLD : 0xff5a6ea8, s);
+            panel(canvas, tx, top + 4 * s, tx + tabWidth, top + 68 * s, active ? 0xdd23457a : 0x99101a38, active ? GOLD : 0xff5a6ea8, s);
             String label = Strings.get("ctab_" + index);
             if (index == 1) {
                 JSONArray banners = latest == null ? null : latest.optJSONArray("banners");
                 if (banners != null && banners.length() > 0) label += " (" + banners.length() + ")";
             }
-            buttonLabel(canvas, "ctab_" + index, label, tx, top + 4 * s, tabWidth, 52 * s, 28 * s, s);
+            buttonLabel(canvas, "ctab_" + index, label, tx, top + 4 * s, tabWidth, 64 * s, 28 * s, s);
             Hit hit = new Hit();
             hit.type = 2;
             hit.name = "ctab_" + index;
-            hit.rect.set(tx, top + 4 * s, tx + tabWidth, top + 56 * s);
+            hit.rect.set(tx, top + 4 * s, tx + tabWidth, top + 68 * s);
             hits.add(hit);
         }
-        if (craftTab == 1) drawBanners(canvas, w, s, top + 64 * s, bottom);
-        else if (craftTab == 2) drawGuidePicker(canvas, w, s, top + 64 * s);
-        else drawCraftRecipes(canvas, w, s, top + 64 * s, bottom);
+        if (craftTab == 1) drawBanners(canvas, w, s, top + 78 * s, bottom);
+        else if (craftTab == 2) drawGuidePicker(canvas, w, s, top + 78 * s);
+        else drawCraftRecipes(canvas, w, s, top + 78 * s, bottom);
     }
 
     // ---- nearby NPCs: the Guide's recipes and a way to start a conversation (and so a trade) with anyone close by
@@ -1576,9 +1577,9 @@ final class TerraPanel extends View {
             String line = npc.optInt(4) + " " + Strings.get("tiles") + (npc.optBoolean(5) ? "  ·  " + Strings.get("trades_here") : "");
             drawText(canvas, line, 130 * s, y + 54 * s, 24 * s, MUTED, true);
             float bx = w - 50 * s - 210 * s;
-            button(canvas, "near_talk_" + npc.optInt(0), Strings.get("talk"), bx, y + 22 * s, 210 * s, 52 * s, 0xff347461, s);
+            button(canvas, "near_talk_" + npc.optInt(0), Strings.get("talk"), bx, y + 16 * s, 210 * s, 66 * s, 0xff347461, s);
             if (npc.optInt(1) == 22) {
-                button(canvas, "near_recipes", Strings.get("recipes_btn"), bx - 230 * s, y + 22 * s, 210 * s, 52 * s, 0xff2a3a6a, s);
+                button(canvas, "near_recipes", Strings.get("recipes_btn"), bx - 230 * s, y + 16 * s, 210 * s, 66 * s, 0xff2a3a6a, s);
             }
             y += 108 * s;
         }
@@ -1657,9 +1658,9 @@ final class TerraPanel extends View {
         float bottom = h - 14 * s;
         panel(canvas, left, top, right, bottom, 0xf0101a38, 0xff8ea2d8, s);
         float tabW = 220 * s;
-        button(canvas, "chat_mode_0", Strings.get("chat_title"), left + 20 * s, top + 14 * s, tabW, 54 * s, chatMode == 0 ? 0xff347461 : 0xff2a3a6a, s);
-        button(canvas, "chat_mode_1", Strings.get("emotes"), left + 36 * s + tabW, top + 14 * s, tabW, 54 * s, chatMode == 1 ? 0xff347461 : 0xff2a3a6a, s);
-        button(canvas, "chat_close", "x", right - 96 * s, top + 14 * s, 76 * s, 54 * s, 0xff7a2a2f, s);
+        button(canvas, "chat_mode_0", Strings.get("chat_title"), left + 20 * s, top + 12 * s, tabW, 64 * s, chatMode == 0 ? 0xff347461 : 0xff2a3a6a, s);
+        button(canvas, "chat_mode_1", Strings.get("emotes"), left + 36 * s + tabW, top + 12 * s, tabW, 64 * s, chatMode == 1 ? 0xff347461 : 0xff2a3a6a, s);
+        button(canvas, "chat_close", "x", right - 116 * s, top + 12 * s, 96 * s, 64 * s, 0xff7a2a2f, s);
         if (chatMode == 1) {
             drawEmotes(canvas, w, s, top + 84 * s, bottom - 12 * s);
             return;
@@ -1759,10 +1760,10 @@ final class TerraPanel extends View {
             hit.rect.set(x, y, x + cell, y + cellH);
             hits.add(hit);
         }
-        float by = bottom - 62 * s;
-        button(canvas, "emote_prev", "‹", 40 * s, by, 100 * s, 54 * s, emotePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+        float by = bottom - 70 * s;
+        button(canvas, "emote_prev", "‹", 40 * s, by, 130 * s, 64 * s, emotePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
         drawCentered(canvas, (emotePage + 1) + " / 4", w / 2f, by + 27 * s, 30 * s, INK);
-        button(canvas, "emote_next", "›", w - 140 * s, by, 100 * s, 54 * s, emotePage < 3 ? 0xff2a3a6a : 0xff1a2238, s);
+        button(canvas, "emote_next", "›", w - 170 * s, by, 130 * s, 64 * s, emotePage < 3 ? 0xff2a3a6a : 0xff1a2238, s);
     }
 
     private void drawBanners(Canvas canvas, int w, float s, float top, float bottom) {
@@ -1775,7 +1776,7 @@ final class TerraPanel extends View {
             return;
         }
         float y = top + 8 * s - scrollY;
-        button(canvas, "banner_all", Strings.get("banner_all"), w - 30 * s - 260 * s, y, 260 * s, 52 * s, 0xff347461, s);
+        button(canvas, "banner_all", Strings.get("banner_all"), w - 30 * s - 300 * s, y, 300 * s, 64 * s, 0xff347461, s);
         drawText(canvas, Strings.get("ctab_1") + ": " + banners.length(), 30 * s, y + 8 * s, 30 * s, GOLD, true);
         y += 66 * s;
         float cell = Math.min(110 * s, (w - 60 * s) / 6 - 8 * s);
@@ -1839,16 +1840,16 @@ final class TerraPanel extends View {
         hits.add(body);
         String title = recipeView == null ? "…" : recipeView.optString("name");
         drawText(canvas, title, left + 30 * s, top + 20 * s, 38 * s, GOLD, true);
-        button(canvas, "rv_close", "x", right - 100 * s, top + 14 * s, 76 * s, 56 * s, 0xff2a3a6a, s);
+        button(canvas, "rv_close", "x", right - 120 * s, top + 12 * s, 96 * s, 64 * s, 0xff2a3a6a, s);
         JSONArray makes = recipeView == null ? null : recipeView.optJSONArray("makes");
         JSONArray uses = recipeView == null ? null : recipeView.optJSONArray("uses");
         int makesCount = makes == null ? 0 : makes.length();
         int usesCount = uses == null ? 0 : uses.length();
         float tabY = top + 84 * s;
         float tabW = (right - left - 90 * s) / 2;
-        button(canvas, "rv_makes", Strings.get("rv_makes") + " (" + makesCount + ")", left + 30 * s, tabY, tabW, 56 * s,
+        button(canvas, "rv_makes", Strings.get("rv_makes") + " (" + makesCount + ")", left + 30 * s, tabY, tabW, 64 * s,
             recipeViewTab == 0 ? 0xff347461 : 0xff2a3a6a, s);
-        button(canvas, "rv_uses", Strings.get("rv_uses") + " (" + usesCount + ")", left + 60 * s + tabW, tabY, tabW, 56 * s,
+        button(canvas, "rv_uses", Strings.get("rv_uses") + " (" + usesCount + ")", left + 60 * s + tabW, tabY, tabW, 64 * s,
             recipeViewTab == 1 ? 0xff347461 : 0xff2a3a6a, s);
         JSONArray list = recipeViewTab == 0 ? makes : uses;
         float rowTop = tabY + 70 * s;
@@ -1896,9 +1897,9 @@ final class TerraPanel extends View {
         }
         if (pages > 1) {
             float by = bottom - 66 * s;
-            button(canvas, "rv_prev", "‹", left + 30 * s, by, 90 * s, 52 * s, recipeViewPage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+            button(canvas, "rv_prev", "‹", left + 30 * s, by, 120 * s, 64 * s, recipeViewPage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
             drawCentered(canvas, (recipeViewPage + 1) + " / " + pages, w / 2f, by + 26 * s, 28 * s, INK);
-            button(canvas, "rv_next", "›", right - 120 * s, by, 90 * s, 52 * s, recipeViewPage + 1 < pages ? 0xff2a3a6a : 0xff1a2238, s);
+            button(canvas, "rv_next", "›", right - 150 * s, by, 120 * s, 64 * s, recipeViewPage + 1 < pages ? 0xff2a3a6a : 0xff1a2238, s);
         }
     }
 
@@ -1949,9 +1950,9 @@ final class TerraPanel extends View {
         if (total > 24) {
             float px = 30 * s;
             float py = bottom - 64 * s;
-            button(canvas, "prev", "‹", px, py, 70 * s, 52 * s, recipePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+            button(canvas, "prev", "‹", px, py, 100 * s, 64 * s, recipePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
             drawCentered(canvas, Strings.get("page") + " " + (recipePage + 1), listWidth / 2 + 10 * s, py + 26 * s, 24 * s, INK);
-            button(canvas, "next", "›", listWidth - 90 * s, py, 70 * s, 52 * s, (recipePage + 1) * 24 < total ? 0xff2a3a6a : 0xff1a2238, s);
+            button(canvas, "next", "›", listWidth - 120 * s, py, 100 * s, 64 * s, (recipePage + 1) * 24 < total ? 0xff2a3a6a : 0xff1a2238, s);
         }
         float dx = listWidth + 16 * s;
         float dw = w - dx - 18 * s;
@@ -2104,9 +2105,9 @@ final class TerraPanel extends View {
         canvas.drawCircle(mapPort.left, mapPort.bottom, r, fill);
         canvas.drawCircle(mapPort.right, mapPort.bottom, r, fill);
         float bx = mapPort.right - 14 * s;
-        bx = button(canvas, "zin", "+", bx - 74 * s, mapPort.top + 14 * s, 74 * s, 64 * s, 0xdd2a3a6a, s);
-        bx = button(canvas, "zout", "-", bx - 74 * s, mapPort.top + 14 * s, 74 * s, 64 * s, 0xdd2a3a6a, s);
-        button(canvas, "center", Strings.get("to_player"), bx - 200 * s, mapPort.top + 14 * s, 200 * s, 64 * s, 0xdd2a3a6a, s);
+        bx = button(canvas, "zin", "+", bx - 90 * s, mapPort.top + 14 * s, 90 * s, 76 * s, 0xdd2a3a6a, s);
+        bx = button(canvas, "zout", "-", bx - 90 * s, mapPort.top + 14 * s, 90 * s, 76 * s, 0xdd2a3a6a, s);
+        button(canvas, "center", Strings.get("to_player"), bx - 220 * s, mapPort.top + 14 * s, 220 * s, 76 * s, 0xdd2a3a6a, s);
     }
 
     // ---- status, hotbar, slots
@@ -2582,7 +2583,7 @@ final class TerraPanel extends View {
     }
 
     private void languageOption(Canvas canvas, String code, String label, String current, float left, float y, float width, float s) {
-        button(canvas, "language_" + code, label, left + 26 * s, y, width - 52 * s, 52 * s,
+        button(canvas, "language_" + code, label, left + 26 * s, y, width - 52 * s, 64 * s,
             current.equals(code) ? 0xff347461 : 0xff2a3a6a, s);
     }
 

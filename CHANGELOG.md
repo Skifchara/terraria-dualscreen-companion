@@ -5,6 +5,13 @@
 - Chat: the game's chat log and an on-screen keyboard (English / Russian, shift, slash commands) - the companion window is not
   focusable, so there is no system keyboard. Opened with the new bubble button in the top bar.
 - Emotes: the game's emote bubbles as a panel (all 151, four pages); a tap shows the bubble over your character.
+- Buffs: tapping a pet buff sends the pet away (the same as the game's pet button); a long press ends any other buff. The buff name
+  and time no longer flash and vanish. Equipment has Pet / Light switches to call them back.
+- Equipment: the game's eye buttons on accessory slots (hide how an accessory looks), plus the same for helmet / body / legs and a
+  Wings switch (drawn only; defence, set bonuses and flight are untouched).
+- Smoother scenery: background layers fade in and the old scene fades out when the biome changes.
+- Bigger buttons everywhere (top bar, filters, shop, equipment, people, chat, recipes, map) and a re-laid-out People list.
+- Fixes: the chat Send key was squeezed to zero width; sprite requests longer than 1 KB were refused by the mod.
 - Nearby tab: when a town NPC is close, a **Nearby** tab slides in with Talk (starts the conversation, and so the shop) and, for the
   Guide, a shortcut to the recipe lookup.
 - The UI atlas extractor now colors single-palette pages without an alpha plane (the emote sheet, ...).
