@@ -285,6 +285,13 @@ final class TerraPanel extends View {
         return result;
     }
 
+    /** A queued command got no answer: it may or may not have reached the game, so say so instead of failing silently. */
+    void commandLost() {
+        feedback = Strings.get("command_lost");
+        feedbackLocal = true;
+        feedbackUntil = SystemClock.uptimeMillis() + 3500;
+    }
+
     void disconnected() {
         sprites.abandonInFlight();
         preloadStage = 0;
@@ -350,7 +357,7 @@ final class TerraPanel extends View {
             npcInfo = response;
         } else {
             if (response.has("error")) {
-                feedback = response.optString("error");
+                feedback = ModErrors.translate(response.optString("error"));
                 feedbackLocal = false;
                 feedbackUntil = SystemClock.uptimeMillis() + 2800;
                 if (sheetOpen && sheetInfo == null) sheetOpen = false;
@@ -1953,7 +1960,9 @@ final class TerraPanel extends View {
 
     private static final String[][] KEYS = {
         {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"},
-        {"1234567890", "йцукенгшщзхъ", "фывапролджэ", "ячсмитьбю"}};
+        {"1234567890", "йцукенгшщзхъ", "фывапролджэ", "ячсмитьбю"},
+        // accents for Spanish and Polish (the Latin letters are on the first layout)
+        {"1234567890", "ąćęłńóśźżü", "áéíóúñ¿¡ç'", "àèìòùâêôû-"}};
 
     private static String cleanChat(String text) {
         return text.replaceAll("\\[c/[0-9a-fA-F]{1,8}:([^\\]]*)\\]", "$1").replaceAll("\\[[a-z]+(/[^:\\]]*)?:[^\\]]*\\]", "");
@@ -1977,7 +1986,7 @@ final class TerraPanel extends View {
                 case "back": if (chatInput.length() > 0) chatInput.setLength(chatInput.length() - 1); break;
                 case "space": if (chatInput.length() < 240) chatInput.append(' '); break;
                 case "shift": keyShift = !keyShift; break;
-                case "lang": keyLayout = 1 - keyLayout; break;
+                case "lang": keyLayout = (keyLayout + 1) % KEYS.length; break;
                 case "send": sendChatInput(); break;
                 default:
                     if (chatInput.length() < 240) {
@@ -2078,7 +2087,7 @@ final class TerraPanel extends View {
         float kx = left + 16 * s;
         button(canvas, "key_shift", "Aa", kx, ky, unit * 1.3f, 68 * s, keyShift ? 0xff347461 : 0xff2a3a6a, s);
         kx += unit * 1.3f + keyGap;
-        button(canvas, "key_lang", keyLayout == 0 ? "EN" : "RU", kx, ky, unit * 1.3f, 68 * s, 0xff2a3a6a, s);
+        button(canvas, "key_lang", keyLayout == 0 ? "EN" : keyLayout == 1 ? "RU" : "ÁŁ", kx, ky, unit * 1.3f, 68 * s, 0xff2a3a6a, s);
         kx += unit * 1.3f + keyGap;
         String[] extra = {"/", ".", ",", "!", "?"};
         for (String symbol : extra) {
@@ -2492,6 +2501,9 @@ final class TerraPanel extends View {
             color = 0xffff9a8a;
         } else if (latest != null && latest.optInt("proto", 0) < EXPECTED_PROTOCOL) {
             message = Strings.get("mod_stale");
+            color = 0xffffb06a;
+        } else if (latest != null && sprites.atlasPages() == 0) {
+            message = Strings.get("sprites_missing");
             color = 0xffffb06a;
         } else if (latest == null) message = "";
         else if (splitMode != 0) message = Strings.get("pick_empty");
@@ -2960,8 +2972,17 @@ final class TerraPanel extends View {
         addButtonHit("dismiss_overlay", 0, 0, w, h);
         float width = 470 * s;
         float left = (w - width) / 2;
-        float top = (h - 422 * s) / 2;
-        panel(canvas, left, top, left + width, top + 422 * s, 0xff101a38, GOLD, s);
+        float top = (h - 480 * s) / 2;
+        panel(canvas, left, top, left + width, top + 480 * s, 0xff101a38, GOLD, s);
+        String version = "?";
+        try {
+            version = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+            // keep the question mark
+        }
+        String diag = String.format(java.util.Locale.ROOT, Strings.get("diag_line"), version,
+            latest == null ? "-" : Integer.toString(latest.optInt("proto", 0)), Integer.toString(sprites.atlasPages()));
+        drawCentered(canvas, diag, w / 2f, top + 452 * s, fitText(diag, 20 * s, width - 30 * s), MUTED);
         drawCentered(canvas, Strings.get("language"), w / 2f, top + 36 * s, 31 * s, GOLD);
         String current = prefs.getString("lang", "auto");
         languageOption(canvas, "auto", Strings.get("language_auto"), current, left, top + 72 * s, width, s);

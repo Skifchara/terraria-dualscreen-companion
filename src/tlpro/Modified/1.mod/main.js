@@ -12,6 +12,10 @@ const Enum = new NativeClass("System", "Enum");
 const port = 38656;
 // Bumped whenever the companion needs something the older mod does not do; the app warns when the running mod is older.
 const PROTOCOL = 2;
+// Development switch: the diagnostic ops below (raw sprite dumps, renders, class probes) are off in released builds so the loopback
+// port exposes only what the companion needs. Set to true while working on the mod.
+const DEBUG = false;
+const DEBUG_OPS = ["sprite", "probe", "render", "inspect", "targets", "tiles", "loadedbg"];
 const limit = 8192;
 
 let listener;
@@ -173,6 +177,9 @@ function runRequest(player, request, now) {
         mirrorChest = Number.isInteger(request.mirrorChest) ? request.mirrorChest : -1;
         mirrorShop = Number.isInteger(request.mirrorShop) ? request.mirrorShop : 0;
         finishMirroredInteraction();
+    }
+    if (!DEBUG && DEBUG_OPS.includes(request.op)) {
+        throw new Error("Неизвестная команда Terraduo");
     }
     switch (request.op) {
         case "state":

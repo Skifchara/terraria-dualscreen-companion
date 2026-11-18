@@ -38,3 +38,7 @@ jobs:
         run: python tools/release.py --check
       - name: Installer scripts compile
         run: python -m py_compile tools/install.py tools/release.py tools/make_installer_zip.py
+      - name: Mod loads against the mock runtime
+        run: node tests/mod_load.mjs
+      - name: Text and message tables are complete
+        run: python tests/test_strings.py

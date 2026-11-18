@@ -50,8 +50,13 @@ Check before you open a PR (the same checks run in GitHub Actions: `.github/work
 
 ```
 for f in src/tlpro/Modified/1.mod/*.js; do node --input-type=module --check < "$f"; done
+node tests/mod_load.mjs
+python tests/test_strings.py
+python tools/release.py --check
 python tools/build.py
 ```
+
+While working on the mod set `DEBUG = true` in `src/tlpro/Modified/1.mod/main.js` to enable the diagnostic operations (and set it back before a release).
 
 ## Pull requests
 

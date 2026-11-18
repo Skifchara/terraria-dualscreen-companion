@@ -153,6 +153,9 @@ final class Strings {
         put("info_title", "Info accessories", "Информационные аксессуары", "Accesorios de información", "Akcesoria informacyjne");
         put("bst_empty", "Nothing here yet", "Здесь пока пусто", "Nada por ahora", "Na razie pusto");
         put("mod_stale", "The mod in the game is outdated: import the new mod pack in TL Pro and restart the game", "Мод в игре устарел: импортируй новый мод в TL Pro и перезапусти игру", "El mod del juego está desactualizado: importa el nuevo en TL Pro y reinicia el juego", "Mod w grze jest nieaktualny: zaimportuj nowy w TL Pro i uruchom grę ponownie");
+        put("command_lost", "The command may not have reached the game - check it and try again", "Команда могла не дойти до игры: проверь и повтори", "Puede que el comando no llegara al juego: compruébalo y repite", "Polecenie mogło nie dotrzeć do gry: sprawdź i spróbuj ponownie");
+        put("sprites_missing", "No game sprites on this device: run Install.bat (or tools/install.py) on the PC", "На устройстве нет спрайтов игры: запусти Install.bat (или tools/install.py) на ПК", "No hay sprites del juego en el dispositivo: ejecuta Install.bat (o tools/install.py) en el PC", "Brak sprite'ów gry na urządzeniu: uruchom Install.bat (lub tools/install.py) na komputerze");
+        put("diag_line", "App %1$s  ·  mod protocol %2$s  ·  sprite pages %3$s", "Приложение %1$s  ·  протокол мода %2$s  ·  страниц спрайтов %3$s", "App %1$s  ·  protocolo del mod %2$s  ·  páginas de sprites %3$s", "Aplikacja %1$s  ·  protokół moda %2$s  ·  stron sprite'ów %3$s");
         put("buff_removed", "Removed", "Снято", "Quitado", "Usunięto");
         put("buff_debuff", "A debuff can't be removed", "Дебафф нельзя снять", "Un perjuicio no se puede quitar", "Debuffa nie można zdjąć");
         put("hint_drag", "Drag an item to move it", "Перетащи предмет, чтобы переместить", "Arrastra un objeto para moverlo", "Przeciągnij przedmiot, aby go przenieść");

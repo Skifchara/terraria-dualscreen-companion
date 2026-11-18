@@ -121,6 +121,7 @@ public final class TlProActivity extends Activity {
                 awaitingReply = false;
                 if (response == null) {
                     panel.disconnected();
+                    if (action) panel.commandLost();
                 } else {
                     panel.accept(response, revision, action);
                 }

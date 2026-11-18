@@ -62,6 +62,20 @@ final class SpriteStore {
         file.delete();
     }
 
+    private long pagesCheckedAt;
+    private int pagesCount;
+
+    /** How many decoded atlas pages the app can see (0 means the PC step of the installation has not been done). */
+    synchronized int atlasPages() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - pagesCheckedAt > 5000 && atlasDir != null) {
+            pagesCheckedAt = now;
+            String[] names = atlasDir.list((dir, name) -> name.endsWith(".png"));
+            pagesCount = names == null ? 0 : names.length;
+        }
+        return pagesCount;
+    }
+
     /** Bumped every time a new sprite arrives so the UI knows to repaint. */
     int revision() { return revision; }
 

@@ -5,6 +5,11 @@
 - Release tooling: `tools/release.py` keeps manifest, TL Pro pack version and CHANGELOG in step (the pack version had stayed at 9
   since 1.0.5, so TL Pro could treat newer packs as the same version - the next pack is version 11) and can publish; `--check` verifies.
 - The app tells you when the mod running in the game is older than the app needs ("import the new pack and restart the game").
+- Mod messages are shown in the app's language (EN / ES / PL tables for all of them); a command that got no answer now says so instead of
+  failing silently; a persistent hint appears when the game sprites are missing; the language picker shows the app version, mod
+  protocol and number of sprite pages for bug reports; accents keyboard (Spanish / Polish) in chat.
+- The diagnostic mod operations are off unless `DEBUG` is set in `main.js` (smaller loopback surface); `SECURITY.md` explains the model.
+- Tests: `node tests/mod_load.mjs` (mod against a mock runtime) and `python tests/test_strings.py`; both run in CI.
 - Housekeeping: old sprite cache folders are deleted, the stage-1 tester (`MainActivity`, `GridView`, `TlProPanel`,
   `TerrariaMapView`) and the native-bridge build step are gone, the cleartext-traffic flag is removed, guides / description /
   architecture notes describe the current features.
