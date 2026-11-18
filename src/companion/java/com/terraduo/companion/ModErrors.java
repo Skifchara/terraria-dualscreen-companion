@@ -15,6 +15,7 @@ final class ModErrors {
     }
 
     static {
+        add("Эта кнопка сейчас недоступна", "That button is unavailable right now", "Ese botón no está disponible ahora", "Ten przycisk jest teraz niedostępny");
         add("Ассортимент изменился", "The stock has changed", "El surtido ha cambiado", "Asortyment się zmienił");
         add("В корзину можно класть только из сумки или сундука", "Only items from the bag or a chest can go to the trash", "Solo se pueden tirar objetos de la bolsa o de un cofre", "Do kosza można wrzucać tylko z plecaka lub skrzyni");
         add("Выбери пустой слот", "Pick an empty slot", "Elige una casilla vacía", "Wybierz pusty slot");

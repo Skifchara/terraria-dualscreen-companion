@@ -396,6 +396,9 @@ function actWithoutSound(player, request) {
         case "emote":
             game.sendEmote(player, request.id);
             break;
+        case "chatoption":
+            chatOption(player, request);
+            break;
         case "talk": {
             const index = request.npc;
             const npc = Number.isInteger(index) && index >= 0 && index < Main.npc.length ? Main.npc[index] : null;
@@ -518,6 +521,62 @@ function actWithoutSound(player, request) {
 }
 
 // Read-only view of an open NPC conversation (design probe for the shop/dialogue screen).
+// The mobile chat window is a list of NPCInteraction objects (shop, help, craft, heal, happiness, quest, close ...): the same list
+// the game shows as buttons for the NPC being talked to. Found by namespace, since the build keeps it outside Terraria.GameContent.
+let interactionList;
+
+function interactions() {
+    if (interactionList) {
+        return interactionList;
+    }
+    for (const space of ["", "Terraria.GameContent"]) {
+        try {
+            const all = new NativeClass(space, "NPCInteractions").All;
+            if (all && all.get_Count() > 0) {
+                interactionList = all;
+                return all;
+            }
+        } catch (_) { /* try the next namespace */ }
+    }
+    return null;
+}
+
+// Buttons of the open conversation: [index, text, exclamation, kind]
+function chatOptions() {
+    const result = [];
+    const all = interactions();
+    if (!all) {
+        return result;
+    }
+    for (let index = 0; index < all.get_Count() && result.length < 8; index++) {
+        try {
+            const option = all.get_Item(index);
+            if (option.Condition()) {
+                const text = String(option.GetText());
+                if (text) {
+                    result.push([index, text, safe(() => option.ShowExclamation, false) ? 1 : 0,
+                        String(safe(() => option.GetType().get_Name(), ""))]);
+                }
+            }
+        } catch (_) { /* this interaction cannot be asked right now */ }
+    }
+    return result;
+}
+
+function chatOption(player, request) {
+    const all = interactions();
+    const index = request.index;
+    if (!all || player.talkNPC < 0 || !Number.isInteger(index) || index < 0 || index >= all.get_Count()) {
+        throw new Error("Эта кнопка сейчас недоступна");
+    }
+    const option = all.get_Item(index);
+    if (!option.Condition()) {
+        throw new Error("Эта кнопка сейчас недоступна");
+    }
+    option.Interact();
+    game.refreshRecipes();
+}
+
 function npc() {
     const player = Main.get_LocalPlayer();
     const index = safe(() => player.talkNPC, -1);
@@ -525,7 +584,7 @@ function npc() {
         text: String(safe(() => Main.get_npcChatText(), "")),
         buttons: [safe(() => Main.get_npcChatFocus1(), false), safe(() => Main.get_npcChatFocus2(), false),
             safe(() => Main.get_npcChatFocus3(), false), safe(() => Main.get_npcChatFocus4(), false)],
-        chest: safe(() => player.chest, -1) };
+        chest: safe(() => player.chest, -1), options: index >= 0 ? chatOptions() : [] };
     if (index >= 0) {
         const entity = safe(() => Main.npc[index], null);
         if (entity) {

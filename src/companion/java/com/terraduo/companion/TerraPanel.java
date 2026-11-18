@@ -248,7 +248,7 @@ final class TerraPanel extends View {
                 infoWanted = false;
                 result = op("info");
                 Json.put(result, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
-            } else if (talking() && shop() == null && now - lastNpcRequest > 1200) {
+            } else if (talking() && shop() == null && now - lastNpcRequest > 600) {
                 lastNpcRequest = now;
                 result = op("npc");
             } else {
@@ -2350,7 +2350,10 @@ final class TerraPanel extends View {
             drawText(canvas, line, 30 * s, y, 28 * s, listening ? GOLD : MUTED, true);
             y += 38 * s;
         }
-        y += 6 * s;
+        boolean searching = searchText.length() > 0;
+        button(canvas, searching ? "search_clear" : "search_open", searching ? searchText.toString() + "  x" : Strings.get("search"),
+            w - 30 * s - 300 * s, y - 4 * s, 300 * s, 62 * s, searching ? 0xff347461 : 0xff2a3a6a, s);
+        y += 70 * s;
         slotCap = 74 * s;
         float size = slotSize(w, s, 10);
         for (int row = 1; row < 5; row++) {
@@ -2710,7 +2713,7 @@ final class TerraPanel extends View {
     }
 
     /** The mod protocol this app needs (see PROTOCOL in the mod's main.js). */
-    private static final int EXPECTED_PROTOCOL = 3;
+    private static final int EXPECTED_PROTOCOL = 4;
 
     private boolean feedbackActive() {
         return !feedback.isEmpty() && SystemClock.uptimeMillis() < feedbackUntil;
@@ -2800,7 +2803,7 @@ final class TerraPanel extends View {
             fill.setColor(0xb0060b1a);
             canvas.drawRect(x, y, x + size, y + size, fill);
         }
-        if (searchText.length() > 0 && pane == 0 && (group == 0 || group == 5) && data != null && typeOf(data) != 0
+        if (searchText.length() > 0 && (pane == 0 || (pane == 2 && craftTab == 2)) && (group == 0 || group == 5) && data != null && typeOf(data) != 0
             && !data.optString(4).toLowerCase(java.util.Locale.ROOT).contains(searchText.toString().toLowerCase(java.util.Locale.ROOT))) {
             fill.setColor(0xc0060b1a);
             canvas.drawRect(x, y, x + size, y + size, fill);
@@ -3135,27 +3138,72 @@ final class TerraPanel extends View {
     }
 
     private void drawDialogue(Canvas canvas, int w, float s, float top, float bottom) {
-        float left = 40 * s;
-        float right = w - 40 * s;
+        float left = 30 * s;
+        float right = w - 30 * s;
         float panelBottom = bottom - 6 * s;
-        float panelTop = top + 20 * s;
-        panel(canvas, left, panelTop, right, panelBottom, 0xee101a38, GOLD, s);
+        float panelTop = top + 12 * s;
+        panel(canvas, left, panelTop, right, panelBottom, 0xee101a38, 0xff8ea2d8, s);
         String name = npcInfo == null ? "" : npcInfo.optString("name");
         String kind = npcInfo == null ? "" : npcInfo.optString("kind");
-        drawText(canvas, (name.isEmpty() ? Strings.get("talking") : name) + (kind.isEmpty() ? "" : "  -  " + kind),
-            left + 24 * s, panelTop + 18 * s, 34 * s, GOLD, true);
-        String chat = npcInfo == null ? "" : npcInfo.optString("text");
-        boolean canShop = npcInfo != null && npcInfo.optInt("talk", -1) == latest.optInt("talk", -1)
-            && npcInfo.optBoolean("canShop");
-        float y = panelTop + 70 * s;
-        for (String line : wrap(chat, right - left - 48 * s, 28 * s)) {
-            drawText(canvas, line, left + 24 * s, y, 28 * s, INK, true);
-            y += 46 * s;
-            if (y > panelBottom - (canShop ? 100 : 20) * s) break;
+        boolean current = npcInfo != null && npcInfo.optInt("talk", -1) == latest.optInt("talk", -1);
+        // portrait: the creature itself on a soft backdrop, then name and role
+        float portrait = 150 * s;
+        float px = left + 22 * s;
+        float py = panelTop + 18 * s;
+        panel(canvas, px, py, px + portrait, py + portrait, 0xcc0a1124, 0xff5a6ea8, s);
+        drawBackdrop(canvas, "Bestiary_Biomes.Surface", px + 4 * s, py + 4 * s, px + portrait - 4 * s, py + portrait - 4 * s, 150);
+        Bitmap sprite = npcInfo == null ? null : sprites.get("npc:" + npcInfo.optInt("id"));
+        if (sprite != null) {
+            float fit = Math.min((portrait - 20 * s) / sprite.getWidth(), (portrait - 20 * s) / sprite.getHeight());
+            fit = Math.min(fit, 4f * s);
+            float sw = sprite.getWidth() * fit;
+            float sh = sprite.getHeight() * fit;
+            dstRect.set(px + (portrait - sw) / 2, py + (portrait - sh) / 2, px + (portrait + sw) / 2, py + (portrait + sh) / 2);
+            canvas.drawBitmap(sprite, null, dstRect, pixels);
         }
-        if (canShop) {
-            button(canvas, "shop_open", Strings.get("open_shop"), left + 24 * s, panelBottom - 76 * s,
-                260 * s, 54 * s, 0xff2c6a3c, s);
+        float tx = px + portrait + 24 * s;
+        String title = name.isEmpty() ? Strings.get("talking") : name;
+        drawText(canvas, title, tx, py + 14 * s, fitText(title, 44 * s, right - tx - 24 * s), GOLD, true);
+        if (!kind.isEmpty() && !kind.equals(name)) drawText(canvas, kind, tx, py + 70 * s, 28 * s, MUTED, true);
+        // buttons first (they decide how much room the text has)
+        JSONArray options = current && npcInfo != null ? npcInfo.optJSONArray("options") : null;
+        int count = options == null ? 0 : options.length();
+        int columns = 3;
+        int rows = (count + columns - 1) / columns;
+        float gap = 10 * s;
+        float bw = (right - left - 44 * s - (columns - 1) * gap) / columns;
+        float bh = 68 * s;
+        float buttonsTop = panelBottom - 18 * s - rows * bh - Math.max(0, rows - 1) * gap;
+        for (int index = 0; index < count; index++) {
+            JSONArray option = options.optJSONArray(index);
+            if (option == null) continue;
+            float bx = left + 22 * s + (index % columns) * (bw + gap);
+            float by = buttonsTop + (index / columns) * (bh + gap);
+            String type = option.optString(3);
+            int color = type.contains("CloseChat") ? 0xff7a2a2f : type.contains("OpenShop") ? 0xff2c6a3c : 0xff2a3a6a;
+            String label = option.optString(1) + (option.optInt(2) != 0 ? " !" : "");
+            panel(canvas, bx, by, bx + bw, by + bh, color, option.optInt(2) != 0 ? GOLD : 0xff8ea2d8, s);
+            buttonLabel(canvas, "chatopt_" + option.optInt(0), label, bx, by, bw, bh, 30 * s, s);
+            Hit hit = new Hit();
+            hit.type = 2;
+            hit.name = "chatopt_" + option.optInt(0);
+            hit.rect.set(bx, by, bx + bw, by + bh);
+            hits.add(hit);
+        }
+        // the NPC's words, shrunk until they fit between the portrait and the buttons
+        String chat = npcInfo == null ? "" : npcInfo.optString("text");
+        float textTop = py + portrait + 18 * s;
+        float textBottom = (count > 0 ? buttonsTop : panelBottom) - 14 * s;
+        float size = 30 * s;
+        ArrayList<String> lines = wrap(chat, right - left - 48 * s, size);
+        while (lines.size() * (size * 1.5f) > textBottom - textTop && size > 18 * s) {
+            size -= 2 * s;
+            lines = wrap(chat, right - left - 48 * s, size);
+        }
+        float y = textTop;
+        for (String line : lines) {
+            drawText(canvas, line, left + 24 * s, y, size, INK, true);
+            y += size * 1.5f;
         }
     }
 
@@ -3773,6 +3821,25 @@ final class TerraPanel extends View {
         }
         if (name.equals("search_clear_bst")) {
             bestiaryQuery.setLength(0);
+            return;
+        }
+        if (name.startsWith("chatopt_")) {
+            int optionIndex = Integer.parseInt(name.substring(8));
+            JSONArray options = npcInfo == null ? null : npcInfo.optJSONArray("options");
+            String type = "";
+            for (int i = 0; options != null && i < options.length(); i++) {
+                JSONArray option = options.optJSONArray(i);
+                if (option != null && option.optInt(0) == optionIndex) type = option.optString(3);
+            }
+            JSONObject command = op("act");
+            Json.put(command, "kind", "chatoption");
+            Json.put(command, "index", optionIndex);
+            send.accept(command);
+            lastNpcRequest = 0;
+            if (type.contains("GuideReverseCrafting")) {
+                craftTab = 2;
+                openPane(2);
+            }
             return;
         }
         if (name.startsWith("ptab_")) {

@@ -160,6 +160,7 @@ final class Strings {
         put("search_hint", "Item name", "Название предмета", "Nombre del objeto", "Nazwa przedmiotu");
         put("search_done", "Done", "Готово", "Hecho", "Gotowe");
         put("search_clear", "Clear", "Сбросить", "Borrar", "Wyczyść");
+        put("talk_kind_close", "Close", "Закрыть", "Cerrar", "Zamknij");
         put("buff_removed", "Removed", "Снято", "Quitado", "Usunięto");
         put("buff_debuff", "A debuff can't be removed", "Дебафф нельзя снять", "Un perjuicio no se puede quitar", "Debuffa nie można zdjąć");
         put("hint_drag", "Drag an item to move it", "Перетащи предмет, чтобы переместить", "Arrastra un objeto para moverlo", "Przeciągnij przedmiot, aby go przenieść");

@@ -11,7 +11,7 @@ const Type = new NativeClass("System", "Type");
 const Enum = new NativeClass("System", "Enum");
 const port = 38656;
 // Bumped whenever the companion needs something the older mod does not do; the app warns when the running mod is older.
-const PROTOCOL = 3;
+const PROTOCOL = 4;
 // Development switch: the diagnostic ops below (raw sprite dumps, renders, class probes) are off in released builds so the loopback
 // port exposes only what the companion needs. Set to true while working on the mod.
 const DEBUG = false;
