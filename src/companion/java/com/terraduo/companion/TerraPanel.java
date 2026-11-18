@@ -81,6 +81,12 @@ final class TerraPanel extends View {
     private int bestiaryFilter;
     private JSONArray bestiaryList;
     private long lastBestiaryAsk;
+    // mini tooltip while an item is held (like the game's hover tooltip)
+    private int tipGroup = -1, tipIndex = -1;
+    private boolean tipWanted, tipWasShown;
+    private JSONObject tipInfo;
+    private float tipX, tipY;
+    private final Runnable slotHold = () -> fireSlotHold();
     private boolean bestiaryFoundOnly;
     private int bestiaryPending;
     private int bestiaryBiome = -1;
@@ -225,6 +231,10 @@ final class TerraPanel extends View {
             } else if (latest != null && backgrounds == null && !backgroundsRequested) {
                 backgroundsRequested = true;
                 result = op("backgrounds");
+            } else if (tipGroup >= 0 && tipWanted) {
+                tipWanted = false;
+                result = op("info");
+                Json.put(result, "from", new JSONArray().put(tipGroup).put(tipIndex));
             } else if (bstOpenId >= 0 && bstWanted) {
                 bstWanted = false;
                 result = op("bestiaryinfo");
@@ -353,6 +363,7 @@ final class TerraPanel extends View {
             }
         } else if (response.has("tooltip")) {
             if (sheetOpen) sheetInfo = response;
+            else if (tipGroup >= 0) tipInfo = response;
         } else if (response.has("buttons") && response.has("talk")) {
             npcInfo = response;
         } else {
@@ -710,6 +721,7 @@ final class TerraPanel extends View {
         } else if (talking() && shop() == null && chest() == null) {
             drawDialogue(canvas, w, s, contentTop, contentBottom);
         }
+        drawMiniTooltip(canvas, w, h, s);
         if (infoOpen && !infoEntries().isEmpty()) drawInfoPicker(canvas, w, h, s);
         if (languagePicker) drawLanguagePicker(canvas, w, h, s);
         drawFlashes(canvas, w, h);
@@ -1524,6 +1536,94 @@ final class TerraPanel extends View {
     private static final int[] TEAM_COLORS = {0xff5a6578, 0xffd04848, 0xff3fa653, 0xff4a6ed8, 0xffd8c040, 0xffd868b8};
 
     /** The game's housing / players / team page: team and PvP, town NPCs with their homes, other players. */
+    private void fireSlotHold() {
+        if (dragging || scrolling || sheetOpen || downHit == null || downHit.type != 0) return;
+        if (typeOf(slotData(downHit.group, downHit.index)) == 0) return;
+        tipGroup = downHit.group;
+        tipIndex = downHit.index;
+        tipX = downX;
+        tipY = downY;
+        tipInfo = null;
+        tipWanted = true;
+        tipWasShown = true;
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        refresh.run();
+        postInvalidate();
+    }
+
+    /** The game-style mini tooltip above the finger: name, stats, the game's own lines and reforge changes. */
+    private void drawMiniTooltip(Canvas canvas, int w, int h, float s) {
+        if (tipGroup < 0) return;
+        JSONArray data = slotData(tipGroup, tipIndex);
+        if (typeOf(data) == 0) return;
+        ArrayList<String> lines = new ArrayList<>();
+        ArrayList<Integer> colors = new ArrayList<>();
+        JSONObject info = tipInfo;
+        String baseName = info == null ? data.optString(4) : info.optString("name", data.optString(4));
+        lines.add(baseName + (data.optInt(1) > 1 ? " (" + data.optInt(1) + ")" : ""));
+        int rare = info == null ? 0 : info.optInt("rare");
+        colors.add(info == null ? INK : RARITY[Math.max(0, Math.min(RARITY.length - 1, rare + 1))]);
+        if (info != null) {
+            int damage = info.optInt("damage");
+            JSONArray kinds = info.optJSONArray("kinds");
+            if (damage > 0) {
+                String kind = kinds != null && kinds.length() > 0 ? " (" + Strings.get(kinds.optString(0)) + ")" : "";
+                lines.add(damage + " " + Strings.get("damage") + kind);
+                colors.add(INK);
+            }
+            if (info.optInt("crit") > 0 && damage > 0) { lines.add(info.optInt("crit") + "% " + Strings.get("crit")); colors.add(INK); }
+            if (info.optInt("useTime") > 0 && damage > 0) { lines.add(Strings.get("speed") + ": " + info.optInt("useTime")); colors.add(INK); }
+            if (info.optInt("defense") > 0) { lines.add(info.optInt("defense") + " " + Strings.get("defense")); colors.add(INK); }
+            if (info.optInt("pick") > 0) { lines.add(info.optInt("pick") + "% " + Strings.get("pick_power")); colors.add(INK); }
+            if (info.optInt("axe") > 0) { lines.add(info.optInt("axe") * 5 + "% " + Strings.get("axe_power")); colors.add(INK); }
+            if (info.optInt("hammer") > 0) { lines.add(info.optInt("hammer") + "% " + Strings.get("hammer_power")); colors.add(INK); }
+            if (info.optInt("healLife") > 0) { lines.add(Strings.get("heals") + " " + info.optInt("healLife")); colors.add(INK); }
+            if (info.optInt("healMana") > 0) { lines.add(Strings.get("restores_mana") + " " + info.optInt("healMana")); colors.add(INK); }
+            if (info.optInt("mana") > 0 && damage > 0) { lines.add(Strings.get("uses_mana") + " " + info.optInt("mana")); colors.add(INK); }
+            JSONArray tooltip = info.optJSONArray("tooltip");
+            for (int index = 0; tooltip != null && index < tooltip.length(); index++) { lines.add(tooltip.optString(index)); colors.add(INK); }
+            JSONArray mods = info.optJSONArray("mods");
+            for (int index = 0; mods != null && index < mods.length(); index++) {
+                JSONArray mod = mods.optJSONArray(index);
+                if (mod == null) continue;
+                int value = mod.optInt(1);
+                String kind = mod.optString(0);
+                boolean good = kind.equals("mana") ? value < 0 : value > 0;
+                lines.add((value > 0 ? "+" : "") + value + "% " + Strings.get("mod_" + kind));
+                colors.add(good ? 0xff7be07b : 0xffe06b6b);
+            }
+        } else {
+            lines.add("...");
+            colors.add(MUTED);
+        }
+        float size = 25 * s;
+        float maxWidth = 560 * s;
+        ArrayList<String> wrapped = new ArrayList<>();
+        ArrayList<Integer> wrappedColors = new ArrayList<>();
+        for (int index = 0; index < lines.size() && wrapped.size() < 14; index++) {
+            for (String part : wrap(lines.get(index), maxWidth, size)) {
+                wrapped.add(part);
+                wrappedColors.add(colors.get(index));
+            }
+        }
+        float width = 0;
+        for (String line : wrapped) width = Math.max(width, measure(line, size));
+        width += 36 * s;
+        float lineStep = 32 * s;
+        float height = wrapped.size() * lineStep + 22 * s;
+        float x = Math.max(10 * s, Math.min(w - width - 10 * s, tipX - width / 2));
+        float y = tipY - height - 54 * s;
+        if (y < 10 * s) y = Math.min(h - height - 10 * s, tipY + 70 * s);
+        fill.setColor(0xf0070d22);
+        canvas.drawRoundRect(x, y, x + width, y + height, 10 * s, 10 * s, fill);
+        stroke.setColor(0xff8ea2d8);
+        stroke.setStrokeWidth(3 * s);
+        canvas.drawRoundRect(x, y, x + width, y + height, 10 * s, 10 * s, stroke);
+        for (int index = 0; index < wrapped.size(); index++) {
+            drawText(canvas, wrapped.get(index), x + 18 * s, y + 10 * s + index * lineStep, size, wrappedColors.get(index), true);
+        }
+    }
+
     private void fireMapHold() {
         if (pane != 3 || dragging || scrolling || mapBitmap == null) return;
         float cx = (mapPort.left + mapPort.right) / 2;
@@ -1860,7 +1960,7 @@ final class TerraPanel extends View {
             JSONArray npc = npcs.optJSONArray(index);
             if (npc == null) continue;
             panel(canvas, 30 * s, y, w - 30 * s, y + 84 * s, 0x99101a38, 0xff5a6ea8, s);
-            Bitmap head = npc.optInt(0) >= 0 ? sprites.get("npchead:" + npc.optInt(0)) : null;
+            Bitmap head = npc.optInt(0) >= 0 ? sprites.get("npchead:" + npc.optInt(0)) : sprites.get("npc:" + npc.optInt(5));   // no head icon: the creature itself
             if (head != null) {
                 float fit = Math.min(48 * s / head.getWidth(), 48 * s / head.getHeight());
                 drawSprite(canvas, head, 44 * s, y + 42 * s - head.getHeight() * fit / 2, head.getWidth() * fit, head.getHeight() * fit);
@@ -3220,6 +3320,13 @@ final class TerraPanel extends View {
                 downAt = SystemClock.uptimeMillis();
                 downHit = hitAt(x, y);
                 removeCallbacks(mapHold);
+                removeCallbacks(slotHold);
+                tipGroup = -1;
+                tipWasShown = false;
+                tipInfo = null;
+                if (downHit != null && downHit.type == 0 && !sheetOpen && typeOf(slotData(downHit.group, downHit.index)) != 0) {
+                    postDelayed(slotHold, 380);
+                }
                 if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen && mapPort.contains(x, y)) postDelayed(mapHold, 450);
                 dragging = false;
                 scrolling = false;
@@ -3231,7 +3338,11 @@ final class TerraPanel extends View {
             case MotionEvent.ACTION_MOVE:
                 if (scaling) return true;
                 float distance = Math.max(Math.abs(x - downX), Math.abs(y - downY));
-                if (distance > 16 * s) removeCallbacks(mapHold);
+                if (distance > 16 * s) {
+                    removeCallbacks(mapHold);
+                    removeCallbacks(slotHold);
+                    tipGroup = -1;
+                }
                 if (pane == 3 && downHit == null && mapBitmap != null && !sheetOpen) {
                     if (distance > 8 * s || !follow) {
                         float perTile = viewScale;
@@ -3316,12 +3427,17 @@ final class TerraPanel extends View {
                 return true;
             case MotionEvent.ACTION_UP:
                 removeCallbacks(mapHold);
+                removeCallbacks(slotHold);
+                tipGroup = -1;
                 stopCraftHold();
                 if (scaling) { scaling = false; return true; }
                 finishTouch(x, y);
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 removeCallbacks(mapHold);
+                removeCallbacks(slotHold);
+                tipGroup = -1;
+                tipWasShown = false;
                 stopCraftHold();
                 dragging = false;
                 edgeZone = 0;
@@ -3379,6 +3495,12 @@ final class TerraPanel extends View {
         if (now == null || now.type != hit.type || now.group != hit.group || now.index != hit.index
             || !java.util.Objects.equals(now.name, hit.name)) return;
         boolean longPress = SystemClock.uptimeMillis() - downAt > 420;
+        // a held item showed its tooltip: releasing it is not a tap (a hotbar slot still opens its item window)
+        if (tipWasShown && hit.type == 0 && !(hit.group == 0 && hit.index < 10)) {
+            tipWasShown = false;
+            return;
+        }
+        tipWasShown = false;
         switch (hit.type) {
             case 1: openPane(hit.index); break;
             case 2:

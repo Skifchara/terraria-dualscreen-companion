@@ -10,6 +10,8 @@
   protocol and number of sprite pages for bug reports; accents keyboard (Spanish / Polish) in chat.
 - The diagnostic mod operations are off unless `DEBUG` is set in `main.js` (smaller loopback surface); `SECURITY.md` explains the model.
 - Tests: `node tests/mod_load.mjs` (mod against a mock runtime) and `python tests/test_strings.py`; both run in CI.
+- Long-press on an item shows a game-style mini tooltip (rarity-coloured name, stats, the game's own lines, reforge changes) while held;
+  releasing it is not a tap. Town NPCs without a head icon (Old Man) show their sprite in the People list.
 - Housekeeping: old sprite cache folders are deleted, the stage-1 tester (`MainActivity`, `GridView`, `TlProPanel`,
   `TerrariaMapView`) and the native-bridge build step are gone, the cleartext-traffic flag is removed, guides / description /
   architecture notes describe the current features.
