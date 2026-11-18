@@ -2973,7 +2973,7 @@ final class TerraPanel extends View {
         float width = 470 * s;
         float left = (w - width) / 2;
         float top = (h - 480 * s) / 2;
-        panel(canvas, left, top, left + width, top + 480 * s, 0xff101a38, GOLD, s);
+        panel(canvas, left, top, left + width, top + 480 * s, 0xf0101a38, 0xff8ea2d8, s);
         String version = "?";
         try {
             version = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0).versionName;
