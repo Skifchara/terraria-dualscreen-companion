@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.7 (installer, pre-release)
+
+- One-step installer: `Install.bat` (Windows) / `python3 tools/install.py` finds or downloads adb, installs the signed app, copies the
+  TL Pro mod pack to the device and decodes the sprites from your own installed Terraria. Released as
+  `Terraduo-Companion-<version>-installer.zip` next to the plain APK. No code changes in the app itself.
+
 ## 1.0.6 (quality of life, pre-release)
 
 - Chat: the game's chat log and an on-screen keyboard (English / Russian, shift, slash commands) - the companion window is not

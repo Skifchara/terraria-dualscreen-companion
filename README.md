@@ -63,12 +63,16 @@ loopback and renders everything on one canvas. Details: [docs/ARCHITECTURE.md](d
 
 ## Quick start
 
-1. Install Terraria (Google Play) and TL Pro. Back up your saves.
-2. Install the APK from the [Releases](../../releases) page (it is signed with a development key).
-3. Import `Terraduo-Companion-mod-*.tl` in TL Pro and enable the pack. Restart the game through TL Pro after every mod update.
-4. Prepare the sprites once on a PC (`tools/extract_assets.py`, `tools/extract_backgrounds.py` — see the
-   [guide](docs/GUIDE_EN.txt), step 4).
-5. Start a single-player world, open **Terraduo Companion** — it opens on the bottom screen by itself.
+1. Install Terraria (Google Play) and TL Pro. Back up your saves. Turn on USB debugging on the device and plug it into a PC.
+2. Download `Terraduo-Companion-<version>-installer.zip` from the [Releases](../../releases) page, unpack it and run
+   **`Install.bat`** (Windows) or `python3 tools/install.py` (macOS / Linux). It installs the app (signed with a development key),
+   copies the mod pack to the device and decodes the sprites from **your own** installed Terraria. It asks before downloading
+   Google's adb or removing anything.
+3. In TL Pro import `Download/Terraduo-Companion-mod-*.tl` and enable the pack. Restart the game through TL Pro after every mod update.
+4. Start a single-player world, open **Terraduo Companion** — it opens on the bottom screen by itself.
+
+Only want the app? Install `Terraduo-Companion-<version>.apk` directly; without the sprite step it draws plain frames.
+Manual steps are in the [guide](docs/GUIDE_EN.txt).
 
 ## Building
 

@@ -10,6 +10,10 @@ TERRADUO COMPANION  -  USER GUIDE (English)
      (needed once for step 4).
    * Back up your saves first (Android/data/com.and.games505.TerrariaPaid/files/).
 
+QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat (Windows) or
+   "python3 tools/install.py" (macOS / Linux) with the device connected over USB. It does steps 2, 3 (copying
+   the file to Download) and 4 below for you. The numbered steps are the manual way.
+
 2. INSTALL THE APP
    a) Copy Terraduo-Companion-1.0.3.apk to the device and install it (allow "install unknown apps"
       for your file manager) - or from the PC:   adb install -r Terraduo-Companion-1.0.3.apk

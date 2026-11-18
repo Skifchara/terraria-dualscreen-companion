@@ -25,7 +25,7 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "assets-cache", "atlas")
-ADB = os.path.join(ROOT, "tools", "platform-tools", "adb.exe")
+ADB = os.environ.get("TERRADUO_ADB") or os.path.join(ROOT, "tools", "platform-tools", "adb.exe")
 if not os.path.exists(ADB):
     ADB = "adb"   # fall back to adb from PATH
 GAME = "com.and.games505.TerrariaPaid"
