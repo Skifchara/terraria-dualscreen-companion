@@ -102,7 +102,9 @@ def extract_db(tex, db):
             alpha = next((a for a in tex.get(name + "_A", []) if a.m_Width == w and a.m_Height == h), None)
             candidates = [p for p in tex.get(name + "_P", []) if p.m_Width == 256]
             # the palette belonging to this resolution tier has height h/32 (hi-res) or h/64 (low-res)
-            pal = next((p for p in candidates if p.m_Height in (h // 32, h // 64)), candidates[0] if candidates else None)
+            # one palette row per 256x256 block (a 2048 page has 64 rows, a 1024 page 16, a 512 page 4, a 256 page 1)
+            blocks = ((w + 255) // 256) * ((h + 255) // 256)
+            pal = next((p for p in candidates if p.m_Height == blocks), None)                 or next((p for p in candidates if p.m_Height in (h // 32, h // 64)), candidates[0] if candidates else None)
             if alpha is None and pal is not None and db == "Buff":
                 # the buff icons carry their own square frame and have no separate alpha page
                 class _Opaque:
