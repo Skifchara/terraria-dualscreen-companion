@@ -12,12 +12,7 @@
     <application
         android:label="Terraduo Companion"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density" />
         <activity
             android:name=".TlProActivity"
             android:label="Terraduo Companion"

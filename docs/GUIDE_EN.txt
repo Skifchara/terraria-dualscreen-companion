@@ -15,15 +15,17 @@ QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat
    the file to Download) and 4 below for you. The numbered steps are the manual way.
 
 2. INSTALL THE APP
-   a) Copy Terraduo-Companion-1.0.3.apk to the device and install it (allow "install unknown apps"
-      for your file manager) - or from the PC:   adb install -r Terraduo-Companion-1.0.3.apk
+   a) Copy Terraduo-Companion-<version>.apk to the device and install it (allow "install unknown apps"
+      for your file manager) - or from the PC:   adb install -r Terraduo-Companion-<version>.apk
    b) The app is called "Terraduo Companion" and has the icon from icon.png.
 
 3. INSTALL THE MOD IN TL PRO
-   a) Copy Terraduo-Companion-mod-v7.tl to the device.
+   a) Copy Terraduo-Companion-mod-v<N>.tl to the device (the installer puts it in Download).
    b) In TL Pro open the pack/mod manager, import the .tl file and enable the pack
       "Terraduo Companion" for your single-player profile.
    c) Every time the mod changes, restart the game through TL Pro: mods are loaded once per start.
+      If the app shows "The mod in the game is outdated", the old mod is still running: import the new pack
+      and restart the game.
 
 4. PREPARE THE SPRITES (once, on the PC, from YOUR copy of the game)
    The app does not contain any game art. Two scripts decode it from the game you installed and
@@ -47,9 +49,11 @@ QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat
 
 6. THE SCREEN
    Top bar:   life and mana (tap to flip between bars and hearts / stars), day/night and area,
-              readings of watch / depth meter / compass / weather radio, HIDE HUD, language (RU/EN).
-   Tabs:      Inventory | Equipment | Craft | Map.
-   Bottom:    buffs and debuffs (tap one for its name and time), status line, hotbar (10 slots).
+              PAUSE, CHAT, HIDE HUD, language (RU/EN).
+   Tabs:      Inventory | Equipment | Craft | Map | People  (+ Nearby / chest / shop tabs when relevant).
+   Bottom:    buffs and debuffs (left), info readings of watch / depth meter / speedometer / ... (right; a "+N"
+              button opens the full live list with icons), status line, hotbar (10 slots, the chosen one
+              is enlarged on the golden plate like in the game).
 
 7. GESTURES AND BUTTONS
    Inventory
@@ -68,9 +72,26 @@ QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat
    Craft: left list = what you can craft now; tap an item to see ingredients and the crafting
           station; press (and hold) "Craft" to craft (hold repeats).
    Map: drag to pan, pinch or use + / - to zoom, "To player" re-centres. Town NPC heads are shown.
+        Long-press on an explored spot to see what block it is.
    Chests: when you open a chest or a bank in the game, the Inventory tab shows it automatically.
           Loot all | Deposit all | Quick stack | Restock | Sort | Close.
           Tap an item in the chest and press "Take", or drag it to a slot.
+
+   Equipment extras: the eye button on every accessory slot hides how it looks on the character; helmet,
+          body and legs have it too, and "Wings" hides the wings (drawing only: defence and flight stay).
+          "Pet" / "Light" send the pet away or call it back; tap a pet in the buff row to send it away, long-press any
+          other (non-debuff) buff to end it. Armour sets 1-3 switch the game's loadouts; the defence total is shown.
+   Craft: three sub-tabs - Recipes, Banners (claim earned banners) and Guide (tap any item to see every recipe that makes
+          it or uses it). Talking to the Guide opens the lookup by itself.
+   People: team colour and PvP, town NPCs with "Check room" / "Move in", other players; the Bestiary sub-tab (below).
+   Bestiary: the game's own entries with habitat backdrops, kill counts and silhouettes for creatures you have not met;
+          filters (all / enemies / bosses / critters / town / found, habitat). Tap a card for its page: stats, flavour text,
+          habitats and drops, each shown as far as the game has unlocked it. Swipe to scroll.
+   Nearby: when a town NPC is close a "Nearby" tab appears: Talk (starts the conversation and so the shop) and, for the Guide,
+          the recipe lookup.
+   Chat: the bubble button opens the game's chat log with an on-screen keyboard (EN / RU, shift, /commands) and a panel with all
+         emotes; a tap on an emote shows it over your character.
+   Pause: freezes the game (released by itself if the companion stops talking to the mod).
 
 8. ITEM WINDOW
    Sprite, name in rarity colour, stack, value, stats and the game's tooltip. Reforge changes are
@@ -87,7 +108,8 @@ QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat
 10. TROUBLESHOOTING
    * "Open a single-player world through TL Pro": load a world, check the mod is enabled, restart
      the game from TL Pro after updating the mod, then reopen the companion.
-   * Empty slots without pictures: repeat step 4 (the sprites are missing or outdated).
+   * Empty slots without pictures: repeat step 4 (the sprites are missing or outdated); the installer does it for you.
+   * Creatures / town NPCs missing in the bestiary: run tools/extract_assets.py again (it decodes the NPC pages now).
    * Background is a generated sky: run extract_backgrounds.py (step 4c).
    * Game crashes when you enter a world: disable the mod pack, enter the world, and report the log.
    * Second screen goes black: the app keeps it awake; wake it with the power button if needed.

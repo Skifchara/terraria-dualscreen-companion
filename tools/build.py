@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build the Terraduo stage-1 artifacts. Pure stdlib + the SDK installed under tools/android-sdk.
+"""Build the Terraduo Companion APK. Pure stdlib + an Android SDK (ANDROID_SDK_ROOT, default tools/android-sdk) and a JDK 17+.
 
-  python tools/build.py            -> build/libterraduo_bridge.so  and  build/terraduo-companion.apk (dev-signed)
+  python tools/build.py            -> build/terraduo-companion.apk (dev-signed)
 
 The dev keystore (tools/dev.keystore, gitignored) is created on first run. It is a DEVELOPMENT key
-(password "terraduo-dev") - never use it for anything you distribute.
+(password "terraduo-dev"). Releases are signed with it so updates install over each other: keep tools/dev.keystore backed up.
 This script does NOT touch Terraria's APK, PairIP or any licence check.
 """
 import glob, os, shutil, subprocess, sys, zipfile
@@ -22,7 +22,6 @@ def _latest(folder):
 
 BT = _latest(os.path.join(SDK, "build-tools"))
 ANDROID_JAR = os.path.join(SDK, "platforms", "android-33", "android.jar")
-NDK = os.path.join(SDK, "ndk", "27.2.12479018", "toolchains", "llvm", "prebuilt", "windows-x86_64", "bin")
 BUILD = os.path.join(ROOT, "build")
 KEYSTORE = os.path.join(ROOT, "tools", "dev.keystore")
 STORE_PASS = "terraduo-dev"
@@ -48,15 +47,6 @@ def jdk(name):
 def run(cmd, **kw):
     print("+", " ".join(cmd))
     subprocess.run(cmd, check=True, **kw)
-
-
-def build_bridge():
-    if not os.path.exists(os.path.join(ROOT, "src", "bridge", "bridge.cpp")):
-        return   # the native bridge experiment is not part of this repository
-    out = os.path.join(BUILD, "libterraduo_bridge.so")
-    run([os.path.join(NDK, "aarch64-linux-android21-clang++.cmd"), "-std=c++17", "-O2", "-Wall", "-Wextra",
-         "-fvisibility=hidden", "-fno-exceptions", "-fno-rtti", "-shared", "-static-libstdc++",
-         "-o", out, os.path.join(ROOT, "src", "bridge", "bridge.cpp"), "-llog", "-ldl"])
 
 
 def ensure_keystore():
@@ -105,6 +95,5 @@ def build_companion():
 
 if __name__ == "__main__":
     os.makedirs(BUILD, exist_ok=True)
-    build_bridge()
     build_companion()
     print("OK ->", BUILD)

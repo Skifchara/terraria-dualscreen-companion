@@ -10,6 +10,8 @@ const Encoding = new NativeClass("System.Text", "Encoding");
 const Type = new NativeClass("System", "Type");
 const Enum = new NativeClass("System", "Enum");
 const port = 38656;
+// Bumped whenever the companion needs something the older mod does not do; the app warns when the running mod is older.
+const PROTOCOL = 2;
 const limit = 8192;
 
 let listener;
@@ -151,6 +153,7 @@ function respond(player, request, error, mapState) {
     state.hud = Date.now() < hideUntil;
     state.hudAvailable = hudHooks.length !== 0;
     state.paused = paused;
+    state.proto = PROTOCOL;
     state.bgNow = sprites.currentBackgrounds(state.env);
     if (mapState) {
         state.map = mapState;

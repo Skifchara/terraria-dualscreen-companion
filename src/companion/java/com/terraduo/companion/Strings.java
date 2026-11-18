@@ -152,6 +152,7 @@ final class Strings {
         put("bst_any", "Any", "Любая", "Cualquiera", "Dowolne");
         put("info_title", "Info accessories", "Информационные аксессуары", "Accesorios de información", "Akcesoria informacyjne");
         put("bst_empty", "Nothing here yet", "Здесь пока пусто", "Nada por ahora", "Na razie pusto");
+        put("mod_stale", "The mod in the game is outdated: import the new mod pack in TL Pro and restart the game", "Мод в игре устарел: импортируй новый мод в TL Pro и перезапусти игру", "El mod del juego está desactualizado: importa el nuevo en TL Pro y reinicia el juego", "Mod w grze jest nieaktualny: zaimportuj nowy w TL Pro i uruchom grę ponownie");
         put("buff_removed", "Removed", "Снято", "Quitado", "Usunięto");
         put("buff_debuff", "A debuff can't be removed", "Дебафф нельзя снять", "Un perjuicio no se puede quitar", "Debuffa nie można zdjąć");
         put("hint_drag", "Drag an item to move it", "Перетащи предмет, чтобы переместить", "Arrastra un objeto para moverlo", "Przeciągnij przedmiot, aby go przenieść");

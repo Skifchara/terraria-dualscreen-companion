@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Release tooling: `tools/release.py` keeps manifest, TL Pro pack version and CHANGELOG in step (the pack version had stayed at 9
+  since 1.0.5, so TL Pro could treat newer packs as the same version - the next pack is version 11) and can publish; `--check` verifies.
+- The app tells you when the mod running in the game is older than the app needs ("import the new pack and restart the game").
+- Housekeeping: old sprite cache folders are deleted, the stage-1 tester (`MainActivity`, `GridView`, `TlProPanel`,
+  `TerrariaMapView`) and the native-bridge build step are gone, the cleartext-traffic flag is removed, guides / description /
+  architecture notes describe the current features.
+
 ## 1.0.7 (installer, pre-release)
 
 - One-step installer: `Install.bat` (Windows) / `python3 tools/install.py` finds or downloads adb, installs the signed app, copies the

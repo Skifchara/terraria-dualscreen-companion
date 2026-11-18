@@ -49,6 +49,17 @@ final class SpriteStore {
         cacheDir.mkdirs();
         File external = context.getExternalFilesDir(null);
         atlasDir = external == null ? null : new File(external, "atlas");
+        // crop caches of earlier versions are never read again: remove them (the folder name changes when the crop rules do)
+        final File[] stale = context.getFilesDir().listFiles(file -> file.isDirectory() && file.getName().startsWith("sprites")
+            && !file.getName().equals(cacheDir.getName()));
+        if (stale != null && stale.length > 0) io.execute(() -> { for (File folder : stale) deleteTree(folder); });
+    }
+
+    private static void deleteTree(File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteTree(child);
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
     }
 
     /** Bumped every time a new sprite arrives so the UI knows to repaint. */
@@ -128,15 +139,15 @@ final class SpriteStore {
             String kind = key.substring(0, colon);
             String value = key.substring(colon + 1);
             JSONObject item = new JSONObject();
-            TlProPanel.put(item, "kind", kind);
-            if (kind.equals("ui")) TlProPanel.put(item, "name", value);
-            else TlProPanel.put(item, "id", Integer.parseInt(value));
+            Json.put(item, "kind", kind);
+            if (kind.equals("ui")) Json.put(item, "name", value);
+            else Json.put(item, "id", Integer.parseInt(value));
             items.put(item);
             inFlight.add(key);
         }
         JSONObject request = new JSONObject();
-        TlProPanel.put(request, "op", "entries");
-        TlProPanel.put(request, "items", items);
+        Json.put(request, "op", "entries");
+        Json.put(request, "items", items);
         return request;
     }
 

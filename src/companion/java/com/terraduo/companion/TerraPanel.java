@@ -221,18 +221,18 @@ final class TerraPanel extends View {
             if (font.needsMetrics() && !fontRequested) {
                 fontRequested = true;
                 result = op("font");
-                TlProPanel.put(result, "name", "mouse");
+                Json.put(result, "name", "mouse");
             } else if (latest != null && backgrounds == null && !backgroundsRequested) {
                 backgroundsRequested = true;
                 result = op("backgrounds");
             } else if (bstOpenId >= 0 && bstWanted) {
                 bstWanted = false;
                 result = op("bestiaryinfo");
-                TlProPanel.put(result, "id", bstOpenId);
+                Json.put(result, "id", bstOpenId);
             } else if (sheetOpen && sheetInfo == null && infoWanted) {
                 infoWanted = false;
                 result = op("info");
-                TlProPanel.put(result, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
+                Json.put(result, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
             } else if (talking() && shop() == null && now - lastNpcRequest > 1200) {
                 lastNpcRequest = now;
                 result = op("npc");
@@ -262,24 +262,24 @@ final class TerraPanel extends View {
         // every request carries the HUD flag: the mod hides/restores the game HUD from it
         int requestedPane = preloadPane >= 0 ? preloadPane : pane;
         if (preloadPane < 0 && pane == 2 && craftTab == 2) requestedPane = 0;   // the item picker needs the whole inventory
-        TlProPanel.put(result, "pane", PANES[requestedPane == INTERACTION ? 0 : requestedPane]);
-        TlProPanel.put(result, "page", preloadPane >= 0 ? 0 : recipePage);
+        Json.put(result, "pane", PANES[requestedPane == INTERACTION ? 0 : requestedPane]);
+        Json.put(result, "page", preloadPane >= 0 ? 0 : recipePage);
         preloadPane = -1;
-        TlProPanel.put(result, "hide", hideRequested);
+        Json.put(result, "hide", hideRequested);
         JSONObject openChest = chest();
         JSONObject openShop = shop();
-        if (openChest != null) TlProPanel.put(result, "mirrorChest", openChest.optInt("id", -1));
-        if (openShop != null) TlProPanel.put(result, "mirrorShop", openShop.optInt("id"));
-        TlProPanel.put(result, "mapVisible", pane == 3 && mapBitmap != null);
+        if (openChest != null) Json.put(result, "mirrorChest", openChest.optInt("id", -1));
+        if (openShop != null) Json.put(result, "mirrorShop", openShop.optInt("id"));
+        Json.put(result, "mapVisible", pane == 3 && mapBitmap != null);
         if (pane == 3 && "map".equals(result.optString("op"))) {
             int step = desiredStep();
             float sample = viewScale * step;
-            TlProPanel.put(result, "step", step);
-            TlProPanel.put(result, "cols", Math.max(16, Math.min(128, (int) Math.ceil(mapPort.width() / sample) + 6)));
-            TlProPanel.put(result, "rows", Math.max(16, Math.min(96, (int) Math.ceil(mapPort.height() / sample) + 6)));
+            Json.put(result, "step", step);
+            Json.put(result, "cols", Math.max(16, Math.min(128, (int) Math.ceil(mapPort.width() / sample) + 6)));
+            Json.put(result, "rows", Math.max(16, Math.min(96, (int) Math.ceil(mapPort.height() / sample) + 6)));
             if (!follow) {
-                TlProPanel.put(result, "x", Math.round(viewCx));
-                TlProPanel.put(result, "y", Math.round(viewCy));
+                Json.put(result, "x", Math.round(viewCx));
+                Json.put(result, "y", Math.round(viewCy));
             }
         }
         return result;
@@ -447,13 +447,13 @@ final class TerraPanel extends View {
     private void sound(String name) {
         performHapticFeedback(name.equals("grab") ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.KEYBOARD_TAP);
         JSONObject command = op("sound");
-        TlProPanel.put(command, "name", name);
+        Json.put(command, "name", name);
         send.accept(command);
     }
 
     private JSONObject op(String name) {
         JSONObject object = new JSONObject();
-        TlProPanel.put(object, "op", name);
+        Json.put(object, "op", name);
         return object;
     }
 
@@ -1526,8 +1526,8 @@ final class TerraPanel extends View {
         mapTipX = downX;
         mapTipY = downY;
         JSONObject command = op("maptile");
-        TlProPanel.put(command, "x", tileX);
-        TlProPanel.put(command, "y", tileY);
+        Json.put(command, "x", tileX);
+        Json.put(command, "y", tileY);
         send.accept(command);
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
     }
@@ -1965,8 +1965,8 @@ final class TerraPanel extends View {
             else if (name.equals("emote_next")) emotePage = Math.min(3, emotePage + 1);
             else {
                 JSONObject command = op("act");
-                TlProPanel.put(command, "kind", "emote");
-                TlProPanel.put(command, "id", Integer.parseInt(name.substring(6)));
+                Json.put(command, "kind", "emote");
+                Json.put(command, "id", Integer.parseInt(name.substring(6)));
                 send.accept(command);
             }
             return;
@@ -2000,8 +2000,8 @@ final class TerraPanel extends View {
         String text = chatInput.toString().trim();
         if (text.isEmpty()) return;
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", "say");
-        TlProPanel.put(command, "text", text);
+        Json.put(command, "kind", "say");
+        Json.put(command, "text", text);
         send.accept(command);
         chatInput.setLength(0);
         lastChatAsk = 0;
@@ -2490,6 +2490,9 @@ final class TerraPanel extends View {
         if (feedbackActive()) {
             message = feedback;
             color = 0xffff9a8a;
+        } else if (latest != null && latest.optInt("proto", 0) < EXPECTED_PROTOCOL) {
+            message = Strings.get("mod_stale");
+            color = 0xffffb06a;
         } else if (latest == null) message = "";
         else if (splitMode != 0) message = Strings.get("pick_empty");
         else if (chosenGroup >= 0) {
@@ -2506,6 +2509,9 @@ final class TerraPanel extends View {
         drawBuffs(canvas, w, h, s);
         drawInfoCorner(canvas, w, h, s);
     }
+
+    /** The mod protocol this app needs (see PROTOCOL in the mod's main.js). */
+    private static final int EXPECTED_PROTOCOL = 2;
 
     private boolean feedbackActive() {
         return !feedback.isEmpty() && SystemClock.uptimeMillis() < feedbackUntil;
@@ -3388,9 +3394,9 @@ final class TerraPanel extends View {
             return;
         }
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", "cancelbuff");
-        TlProPanel.put(command, "type", buff.optInt(0));
-        TlProPanel.put(command, "slot", buff.optInt(5, index));
+        Json.put(command, "kind", "cancelbuff");
+        Json.put(command, "type", buff.optInt(0));
+        Json.put(command, "slot", buff.optInt(5, index));
         send.accept(command);
         feedback = Strings.get("buff_removed") + ": " + buff.optString(3);
         feedbackLocal = true;
@@ -3420,8 +3426,8 @@ final class TerraPanel extends View {
                 return;
             }
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "talk");
-            TlProPanel.put(command, "npc", Integer.parseInt(name.substring(name.lastIndexOf('_') + 1)));
+            Json.put(command, "kind", "talk");
+            Json.put(command, "npc", Integer.parseInt(name.substring(name.lastIndexOf('_') + 1)));
             send.accept(command);
             return;
         }
@@ -3466,37 +3472,37 @@ final class TerraPanel extends View {
             // house_check_<npc> / house_move_<npc>: the game's own room check at the player's position
             String[] parts = name.split("_");
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "housing");
-            TlProPanel.put(command, "command", parts[1]);
-            TlProPanel.put(command, "npc", Integer.parseInt(parts[2]));
+            Json.put(command, "kind", "housing");
+            Json.put(command, "command", parts[1]);
+            Json.put(command, "npc", Integer.parseInt(parts[2]));
             send.accept(command);
             return;
         }
         if (name.startsWith("loadout_") || name.startsWith("team_") || name.equals("pvp")) {
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
-            if (!name.equals("pvp")) TlProPanel.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
+            Json.put(command, "kind", name.startsWith("loadout_") ? "loadout" : name.equals("pvp") ? "pvp" : "team");
+            if (!name.equals("pvp")) Json.put(command, "value", Integer.parseInt(name.substring(name.indexOf('_') + 1)));
             send.accept(command);
             return;
         }
         if (name.startsWith("look_")) {
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "togglelook");
-            TlProPanel.put(command, "what", name.equals("look_wings") ? "wings" : "armor");
-            if (!name.equals("look_wings")) TlProPanel.put(command, "slot", Integer.parseInt(name.substring(11)));
+            Json.put(command, "kind", "togglelook");
+            Json.put(command, "what", name.equals("look_wings") ? "wings" : "armor");
+            if (!name.equals("look_wings")) Json.put(command, "slot", Integer.parseInt(name.substring(11)));
             send.accept(command);
             return;
         }
         if (name.startsWith("eye_")) {
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "togglevisible");
-            TlProPanel.put(command, "slot", Integer.parseInt(name.substring(4)));
+            Json.put(command, "kind", "togglevisible");
+            Json.put(command, "slot", Integer.parseInt(name.substring(4)));
             send.accept(command);
             return;
         }
         if (name.equals("pause")) {
             JSONObject command = op("pause");
-            TlProPanel.put(command, "on", !(latest != null && latest.optBoolean("paused")));
+            Json.put(command, "on", !(latest != null && latest.optBoolean("paused")));
             send.accept(command);
             return;
         }
@@ -3548,8 +3554,8 @@ final class TerraPanel extends View {
         }
         if (name.startsWith("petswitch_")) {
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "togglepet");
-            TlProPanel.put(command, "which", Integer.parseInt(name.substring(10)));
+            Json.put(command, "kind", "togglepet");
+            Json.put(command, "which", Integer.parseInt(name.substring(10)));
             send.accept(command);
             return;
         }
@@ -3569,8 +3575,8 @@ final class TerraPanel extends View {
         }
         if (name.startsWith("chest_")) {
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "chest");
-            TlProPanel.put(command, "command", name.substring(6));
+            Json.put(command, "kind", "chest");
+            Json.put(command, "command", name.substring(6));
             putContainer(command);
             send.accept(command);
             return;
@@ -3653,12 +3659,12 @@ final class TerraPanel extends View {
             return;
         }
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", "split");
-        TlProPanel.put(command, "amount", "half");
-        TlProPanel.put(command, "from", new JSONArray().put(group).put(index));
-        TlProPanel.put(command, "expectFrom", expected(slotData(group, index)));
-        TlProPanel.put(command, "to", new JSONArray().put(0).put(free));
-        TlProPanel.put(command, "expectTo", expected(slotData(0, free)));
+        Json.put(command, "kind", "split");
+        Json.put(command, "amount", "half");
+        Json.put(command, "from", new JSONArray().put(group).put(index));
+        Json.put(command, "expectFrom", expected(slotData(group, index)));
+        Json.put(command, "to", new JSONArray().put(0).put(free));
+        Json.put(command, "expectTo", expected(slotData(0, free)));
         send.accept(command);
     }
 
@@ -3687,12 +3693,12 @@ final class TerraPanel extends View {
             JSONArray data = slotData(hit.group, hit.index);
             if (hit.group == 0 && typeOf(data) == 0) {
                 JSONObject command = op("act");
-                TlProPanel.put(command, "kind", "split");
-                TlProPanel.put(command, "amount", splitMode == 2 ? "half" : "one");
-                TlProPanel.put(command, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
-                TlProPanel.put(command, "expectFrom", expected(slotData(sheetGroup, sheetIndex)));
-                TlProPanel.put(command, "to", new JSONArray().put(hit.group).put(hit.index));
-                TlProPanel.put(command, "expectTo", expected(data));
+                Json.put(command, "kind", "split");
+                Json.put(command, "amount", splitMode == 2 ? "half" : "one");
+                Json.put(command, "from", new JSONArray().put(sheetGroup).put(sheetIndex));
+                Json.put(command, "expectFrom", expected(slotData(sheetGroup, sheetIndex)));
+                Json.put(command, "to", new JSONArray().put(hit.group).put(hit.index));
+                Json.put(command, "expectTo", expected(data));
                 send.accept(command);
             }
             splitMode = 0;
@@ -3722,7 +3728,7 @@ final class TerraPanel extends View {
         boolean hotbar = hit.group == 0 && hit.index < 10;
         if (hotbar && !longPress) {
             JSONObject action = op("select");
-            TlProPanel.put(action, "slot", hit.index);
+            Json.put(action, "slot", hit.index);
             send.accept(action);
         } else if (typeOf(data) != 0) {
             if (hit.group == 0 && data.optInt(1) >= 2) {
@@ -3738,9 +3744,9 @@ final class TerraPanel extends View {
 
     private void claimBanner(int banner, int amount) {
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", "bannerclaim");
-        TlProPanel.put(command, "banner", banner);
-        TlProPanel.put(command, "amount", amount);
+        Json.put(command, "kind", "bannerclaim");
+        Json.put(command, "banner", banner);
+        Json.put(command, "amount", amount);
         send.accept(command);
     }
 
@@ -3748,7 +3754,7 @@ final class TerraPanel extends View {
     private void showRecipesFor(int type) {
         if (type <= 0) return;
         JSONObject command = op("recipesfor");
-        TlProPanel.put(command, "type", type);
+        Json.put(command, "type", type);
         send.accept(command);
         recipeView = null;
         recipeViewOpen = true;
@@ -3789,7 +3795,7 @@ final class TerraPanel extends View {
                 break;
             case "drop":
                 JSONObject hotbar = op("select");
-                TlProPanel.put(hotbar, "slot", sheetIndex);
+                Json.put(hotbar, "slot", sheetIndex);
                 if (latest != null && latest.optInt("hotbar") != sheetIndex) send.accept(hotbar);
                 final int group = sheetGroup;
                 final int index = sheetIndex;
@@ -3805,38 +3811,38 @@ final class TerraPanel extends View {
 
     private void act(String kind, int group, int index, JSONArray data) {
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", kind);
+        Json.put(command, "kind", kind);
         if (data != null) {
-            TlProPanel.put(command, "from", new JSONArray().put(group).put(index));
-            TlProPanel.put(command, "expectFrom", expected(data));
+            Json.put(command, "from", new JSONArray().put(group).put(index));
+            Json.put(command, "expectFrom", expected(data));
         }
         if (group == 5 || kind.equals("deposit")) putContainer(command);
-        if (kind.equals("trashswap")) TlProPanel.put(command, "expectTrash", expected(slotData(6, 0)));
-        if (kind.equals("use")) TlProPanel.put(command, "exact", true);
+        if (kind.equals("trashswap")) Json.put(command, "expectTrash", expected(slotData(6, 0)));
+        if (kind.equals("use")) Json.put(command, "exact", true);
         send.accept(command);
     }
 
     private void putContainer(JSONObject command) {
         JSONObject chest = chest();
-        if (chest != null) TlProPanel.put(command, "container", chest.optInt("id"));
+        if (chest != null) Json.put(command, "container", chest.optInt("id"));
     }
 
     private void trade(String kind, int inventorySlot) {
         if (latest == null) return;
         JSONObject shop = shop();
         JSONObject command = op("act");
-        TlProPanel.put(command, "kind", "shop");
-        TlProPanel.put(command, "command", kind);
-        TlProPanel.put(command, "talk", latest.optInt("talk", -1));
-        if (shop != null) TlProPanel.put(command, "shop", shop.optInt("id"));
+        Json.put(command, "kind", "shop");
+        Json.put(command, "command", kind);
+        Json.put(command, "talk", latest.optInt("talk", -1));
+        if (shop != null) Json.put(command, "shop", shop.optInt("id"));
         if (kind.equals("buy")) {
-            TlProPanel.put(command, "slot", shopSelection);
-            TlProPanel.put(command, "expectFrom", expected(slotData(7, shopSelection)));
+            Json.put(command, "slot", shopSelection);
+            Json.put(command, "expectFrom", expected(slotData(7, shopSelection)));
             JSONArray price = shopPrice();
-            TlProPanel.put(command, "price", price == null ? JSONObject.NULL : price);
+            Json.put(command, "price", price == null ? JSONObject.NULL : price);
         } else if (kind.equals("sell")) {
-            TlProPanel.put(command, "from", new JSONArray().put(0).put(inventorySlot));
-            TlProPanel.put(command, "expectFrom", expected(slotData(0, inventorySlot)));
+            Json.put(command, "from", new JSONArray().put(0).put(inventorySlot));
+            Json.put(command, "expectFrom", expected(slotData(0, inventorySlot)));
         }
         send.accept(command);
     }
@@ -3853,20 +3859,20 @@ final class TerraPanel extends View {
             int index = toGroup == 6 ? fromIndex : toIndex;
             if (group != 0 && group != 5) return;
             JSONObject command = op("act");
-            TlProPanel.put(command, "kind", "trashswap");
-            TlProPanel.put(command, "from", new JSONArray().put(group).put(index));
-            TlProPanel.put(command, "expectFrom", expected(slotData(group, index)));
-            TlProPanel.put(command, "expectTrash", expected(slotData(6, 0)));
-            TlProPanel.put(command, "recover", fromGroup == 6);
+            Json.put(command, "kind", "trashswap");
+            Json.put(command, "from", new JSONArray().put(group).put(index));
+            Json.put(command, "expectFrom", expected(slotData(group, index)));
+            Json.put(command, "expectTrash", expected(slotData(6, 0)));
+            Json.put(command, "recover", fromGroup == 6);
             if (group == 5) putContainer(command);
             send.accept(command);
             return;
         }
         JSONObject command = op("transfer");
-        TlProPanel.put(command, "from", new JSONArray().put(fromGroup).put(fromIndex));
-        TlProPanel.put(command, "expectFrom", expected(slotData(fromGroup, fromIndex)));
-        TlProPanel.put(command, "to", new JSONArray().put(toGroup).put(toIndex));
-        TlProPanel.put(command, "expectTo", expected(slotData(toGroup, toIndex)));
+        Json.put(command, "from", new JSONArray().put(fromGroup).put(fromIndex));
+        Json.put(command, "expectFrom", expected(slotData(fromGroup, fromIndex)));
+        Json.put(command, "to", new JSONArray().put(toGroup).put(toIndex));
+        Json.put(command, "expectTo", expected(slotData(toGroup, toIndex)));
         if (fromGroup == 5 || toGroup == 5) putContainer(command);
         send.accept(command);
     }
@@ -3897,8 +3903,8 @@ final class TerraPanel extends View {
         JSONArray entry = findRecipe(entries, id);
         if (entry == null) return;
         JSONObject command = op("craft");
-        TlProPanel.put(command, "id", id);
-        TlProPanel.put(command, "expect", expected(entry.optJSONArray(1)));
+        Json.put(command, "id", id);
+        Json.put(command, "expect", expected(entry.optJSONArray(1)));
         send.accept(command);
     }
 }

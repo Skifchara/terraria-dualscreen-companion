@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -31,3 +34,7 @@ jobs:
           if git ls-files | grep -E '\.(apk|obb|dll|so)$|dump\.cs|il2cpp\.h|global-metadata\.dat|assets-cache/|/atlas/'; then
             echo "game files or decoded assets must not be committed"; exit 1
           fi
+      - name: Versions agree (manifest, TL Pro pack, changelog)
+        run: python tools/release.py --check
+      - name: Installer scripts compile
+        run: python -m py_compile tools/install.py tools/release.py tools/make_installer_zip.py
