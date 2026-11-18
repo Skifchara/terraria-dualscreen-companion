@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.8 (pre-release)
 
 - Release tooling: `tools/release.py` keeps manifest, TL Pro pack version and CHANGELOG in step (the pack version had stayed at 9
   since 1.0.5, so TL Pro could treat newer packs as the same version - the next pack is version 11) and can publish; `--check` verifies.
@@ -15,7 +15,7 @@
 - Search in the Craft recipes list (filtered on the mod side, protocol 3) and in the bestiary (known names only).
 - NPC conversation window rebuilt: portrait, name and role, the NPC's words scaled to fit, and the real buttons of the conversation (Shop, Help, Craft, Heal, Happiness, Quest, Close ...) taken from the game's own list; the Guide's Craft button opens the recipe lookup, which also has item search. Mod protocol 4.
 - With "Hide HUD" on, the game's own conversation, shop, Guide crafting, housing, banner, emote and bestiary windows and the page icons are no longer drawn on the top screen (the companion shows them); empty locked equipment slots no longer print two labels over each other.
-- Fixed wrong colours of small atlas pages (512 px and smaller: NPC head icons such as the Guide's, many buff icons such as the pumpkin / candles, map and minimap icons): the palette is now chosen by block count. Re-run the sprite step (installer `--sprites`) after updating.
+- Fixed wrong colours of small atlas pages (512 px and smaller: NPC head icons such as the Guide's, many buff icons such as the pumpkin / candles, map and minimap icons): the palette is now chosen by block count. The installer now redoes the sprite step by itself when the device holds an older decoding (marker file `atlas-version.txt`).
 - Inventory search (keyboard panel; non-matching items dim) and map markers for world spawn, bed and last death point.
 - Housekeeping: old sprite cache folders are deleted, the stage-1 tester (`MainActivity`, `GridView`, `TlProPanel`,
   `TerrariaMapView`) and the native-bridge build step are gone, the cleartext-traffic flag is removed, guides / description /

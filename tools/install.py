@@ -163,10 +163,18 @@ def push_mod(adb, serial, mod):
     say("Mod pack copied to the device: Download/%s" % name, "Мод скопирован на устройство: Download/%s" % name)
 
 
+ATLAS_VERSION = 2   # keep in step with tools/extract_assets.py
+
+
 def atlas_present(adb, serial):
-    out = run([adb, "-s", serial, "shell", "ls", "/sdcard/Android/data/%s/files/atlas" % COMPANION],
-              env=dict(os.environ, MSYS_NO_PATHCONV="1")).stdout
-    return len([line for line in out.splitlines() if line.strip().endswith(".png")]) > 50
+    """True when the device holds decoded sprites of the current decoding version."""
+    base = "/sdcard/Android/data/%s/files/atlas" % COMPANION
+    env = dict(os.environ, MSYS_NO_PATHCONV="1")
+    out = run([adb, "-s", serial, "shell", "ls", base], env=env).stdout
+    if len([line for line in out.splitlines() if line.strip().endswith(".png")]) <= 50:
+        return False
+    version = run([adb, "-s", serial, "shell", "cat", base + "/atlas-version.txt"], env=env).stdout.strip()
+    return version.isdigit() and int(version) >= ATLAS_VERSION
 
 
 def python_with_tools(auto):

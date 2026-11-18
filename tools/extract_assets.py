@@ -31,6 +31,7 @@ if not os.path.exists(ADB):
 GAME = "com.and.games505.TerrariaPaid"
 COMPANION = "com.terraduo.companion"
 FONTS = {"mouse": "Mouse_Text_%d", "stack": "Item_Stack_%d"}
+ATLAS_VERSION = 2   # bumped when the decoding changes; tools/install.py redoes the sprite step when the device has an older one
 
 
 def pull_apk():
@@ -176,6 +177,8 @@ if __name__ == "__main__":
     for db in args.dbs.split(","):
         print(db, extract_db(tex, db.strip()), "pages")
     extract_fonts(tex)
+    with open(os.path.join(OUT, "atlas-version.txt"), "w") as handle:
+        handle.write(str(ATLAS_VERSION))
     print("done ->", OUT)
     if args.push:
         push()
