@@ -726,7 +726,7 @@ final class TerraPanel extends View {
             drawBestiaryDetail(canvas, w, h, s);
         } else if (sheetOpen) {
             drawSheet(canvas, w, h, s);
-        } else if (talking() && shop() == null && chest() == null) {
+        } else if (talking() && shop() == null && chest() == null && !(pane == 2 && craftTab == 2)) {
             drawDialogue(canvas, w, s, contentTop, contentBottom);
         }
         drawMiniTooltip(canvas, w, h, s);
@@ -3191,7 +3191,7 @@ final class TerraPanel extends View {
             hits.add(hit);
         }
         // the NPC's words, shrunk until they fit between the portrait and the buttons
-        String chat = npcInfo == null ? "" : npcInfo.optString("text");
+        String chat = npcInfo == null ? "" : cleanChat(npcInfo.optString("text")).replaceAll("\\s{2,}", " ");
         float textTop = py + portrait + 18 * s;
         float textBottom = (count > 0 ? buttonsTop : panelBottom) - 14 * s;
         float size = 30 * s;
