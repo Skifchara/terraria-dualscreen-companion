@@ -1134,9 +1134,13 @@ final class TerraPanel extends View {
     private final Path symbolPath = new Path();
 
     private void drawSymbol(Canvas canvas, String symbol, float cx, float cy, float size) {
+        drawSymbol(canvas, symbol, cx, cy, size, GOLD);
+    }
+
+    private void drawSymbol(Canvas canvas, String symbol, float cx, float cy, float size, int color) {
         float r = size / 2;
-        fill.setColor(GOLD);
-        stroke.setColor(GOLD);
+        fill.setColor(color);
+        stroke.setColor(color);
         stroke.setStrokeWidth(Math.max(2f, size * 0.1f));
         symbolPath.reset();
         switch (symbol) {
@@ -1181,6 +1185,19 @@ final class TerraPanel extends View {
                 canvas.drawPath(symbolPath, fill);
                 break;
             }
+            case "bed":
+                canvas.drawRect(cx - r, cy - r * 0.1f, cx + r, cy + r * 0.45f, fill);
+                canvas.drawRect(cx - r, cy - r * 0.6f, cx - r * 0.7f, cy + r * 0.8f, fill);
+                canvas.drawRect(cx - r * 0.6f, cy - r * 0.55f, cx - r * 0.1f, cy - r * 0.1f, fill);
+                canvas.drawRect(cx + r * 0.85f, cy + r * 0.45f, cx + r, cy + r * 0.8f, fill);
+                break;
+            case "skull":
+                canvas.drawCircle(cx, cy - r * 0.15f, r * 0.75f, fill);
+                canvas.drawRect(cx - r * 0.45f, cy + r * 0.3f, cx + r * 0.45f, cy + r * 0.85f, fill);
+                fill.setColor(0xff000000);
+                canvas.drawCircle(cx - r * 0.3f, cy - r * 0.2f, r * 0.2f, fill);
+                canvas.drawCircle(cx + r * 0.3f, cy - r * 0.2f, r * 0.2f, fill);
+                break;
             case "pause":
                 canvas.drawRect(cx - r * 0.7f, cy - r * 0.8f, cx - r * 0.15f, cy + r * 0.8f, fill);
                 canvas.drawRect(cx + r * 0.15f, cy - r * 0.8f, cx + r * 0.7f, cy + r * 0.8f, fill);
@@ -2576,6 +2593,19 @@ final class TerraPanel extends View {
             canvas.drawCircle(markerX, markerY, (13 + 4 * pulse) * s, fill);
             fill.setColor(GOLD);
             canvas.drawCircle(markerX, markerY, (8 + 3 * pulse) * s, fill);
+            JSONArray markers = latest == null ? null : latest.optJSONArray("markers");
+            for (int index = 0; markers != null && index < markers.length(); index++) {
+                JSONArray marker = markers.optJSONArray(index);
+                if (marker == null) continue;
+                float mx = cx + (marker.optInt(1) - viewCx) * perTile;
+                float my = cy + (marker.optInt(2) - viewCy) * perTile;
+                if (!mapPort.contains(mx, my)) continue;
+                int kind = marker.optInt(0);
+                fill.setColor(0xcc000000);
+                canvas.drawCircle(mx, my, 20 * s, fill);
+                drawSymbol(canvas, kind == 2 ? "skull" : kind == 1 ? "bed" : "house", mx, my, 26 * s,
+                    kind == 2 ? 0xffe0e0e0 : kind == 1 ? 0xff7ab8ff : 0xff5ae08a);
+            }
             JSONArray npcs = latest == null ? null : latest.optJSONArray("npcs");
             for (int index = 0; npcs != null && index < npcs.length(); index++) {
                 JSONArray npc = npcs.optJSONArray(index);

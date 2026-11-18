@@ -786,6 +786,26 @@ function readPeople(player) {
     return { npcs, players, team: safe(() => player.team, 0), pvp: !!safe(() => player.hostile, false) };
 }
 
+// Places the player may want on the map: [kind (0 world spawn, 1 bed, 2 last death), tileX, tileY]
+function readMarkers(player) {
+    const result = [];
+    try {
+        result.push([0, Main.spawnTileX, Main.spawnTileY]);
+    } catch (_) { /* no spawn */ }
+    try {
+        if (player.SpawnX >= 0 && player.SpawnY >= 0) {
+            result.push([1, player.SpawnX, player.SpawnY]);
+        }
+    } catch (_) { /* no bed */ }
+    try {
+        if (player.showLastDeath) {
+            const place = player.lastDeathPostion;
+            result.push([2, Math.floor(place.X / 16), Math.floor(place.Y / 16)]);
+        }
+    } catch (_) { /* no death point */ }
+    return result;
+}
+
 // NPCs for the map: [tileX, tileY, headIndex, name, kind (0 town, 1 boss), life, lifeMax]
 function readNpcs() {
     const result = [];
@@ -872,6 +892,7 @@ function snapshot(player, pane, page) {
         inventory: slots(player.inventory, pane === "inventory" ? inventorySize : 10)
     };
     if (pane === "map") {
+        state.markers = readMarkers(player);
         state.npcs = readNpcs();
         state.look = readLook(player);
     }
