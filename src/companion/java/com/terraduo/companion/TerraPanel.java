@@ -2689,7 +2689,7 @@ final class TerraPanel extends View {
             String name = data == null || typeOf(data) == 0 ? "" : data.optString(4);
             message = name + (pane <= 1 ? (name.isEmpty() ? "" : "  ·  ") + Strings.get("hint_drag") : "");
         }
-        drawCenteredBox(canvas, message, w / 2f, h - 212 * s, 30 * s, color);
+        drawCenteredBox(canvas, message, w / 2f, h - 212 * s, fitText(message, 30 * s, w - 80 * s), color);
         drawBuffs(canvas, w, h, s);
         drawInfoCorner(canvas, w, h, s);
     }
