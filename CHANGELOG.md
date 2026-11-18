@@ -14,6 +14,7 @@
   releasing it is not a tap. Town NPCs without a head icon (Old Man) show their sprite in the People list.
 - Search in the Craft recipes list (filtered on the mod side, protocol 3) and in the bestiary (known names only).
 - NPC conversation window rebuilt: portrait, name and role, the NPC's words scaled to fit, and the real buttons of the conversation (Shop, Help, Craft, Heal, Happiness, Quest, Close ...) taken from the game's own list; the Guide's Craft button opens the recipe lookup, which also has item search. Mod protocol 4.
+- With "Hide HUD" on, the game's own conversation, shop, Guide crafting, housing, banner, emote and bestiary windows and the page icons are no longer drawn on the top screen (the companion shows them); empty locked equipment slots no longer print two labels over each other.
 - Inventory search (keyboard panel; non-matching items dim) and map markers for world spawn, bed and last death point.
 - Housekeeping: old sprite cache folders are deleted, the stage-1 tester (`MainActivity`, `GridView`, `TlProPanel`,
   `TerrariaMapView`) and the native-bridge build step are gone, the cleartext-traffic flag is removed, guides / description /

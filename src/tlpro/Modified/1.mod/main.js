@@ -41,8 +41,9 @@ function report(message) {
 }
 
 function mirroredInteraction() {
+    // a conversation is always shown by the companion while it is open, so the game's own window is redundant
     return (mirrorChest !== -1 && Main.get_LocalPlayer().chest === mirrorChest) ||
-        (mirrorShop > 0 && Main.get_npcShop() === mirrorShop);
+        (mirrorShop > 0 && Main.get_npcShop() === mirrorShop) || Main.get_LocalPlayer().talkNPC >= 0;
 }
 
 function finishMirroredInteraction(force = false) {
@@ -87,8 +88,14 @@ for (const [name, method] of [["GUIHearts", "Draw"], ["GUIMana", "Draw"], ["GUIH
     hideWhileConnected(name, method, () => true);
 }
 hideWhileConnected("GUIMap", "DrawMap", () => hideMap && !Main.get_mapFullscreen());
+// Windows the companion shows itself (conversation, Guide crafting, housing, banners, emotes, bestiary): drawn only while
+// something is open, so hiding their rendering while "Hide HUD" is on leaves the game state untouched.
+for (const name of ["GUINPCDialogue", "GUIShop", "GUICraftGuide", "GUICraftGuidePopup", "GUICrafting", "GUIHousingMenu",
+    "GUIBannerCrafting", "GUIEmotesWindow", "GUIBestiary", "GUITalkerList"]) {
+    hideWhileConnected(name, "Draw", () => true);
+}
 // Keep the container and its inventory session open. Suppress only the mirrored page's rendering.
-hideWhileConnected("GUIPageIcons", "Draw", mirroredInteraction);
+hideWhileConnected("GUIPageIcons", "Draw", () => true);
 
 function closeConnection() {
     const current = connection;

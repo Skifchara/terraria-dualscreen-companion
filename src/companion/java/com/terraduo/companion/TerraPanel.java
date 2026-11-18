@@ -2808,7 +2808,7 @@ final class TerraPanel extends View {
             fill.setColor(0xc0060b1a);
             canvas.drawRect(x, y, x + size, y + size, fill);
         }
-        if (data != null && typeOf(data) == 0 && label != null) {
+        if (data != null && typeOf(data) == 0 && label != null && !locked) {
             drawCentered(canvas, label, x + size / 2, y + size / 2, Math.max(14, 18 * s), 0x99b5c5d4);
         } else if (label != null && group == 0 && index < 10) {
             drawText(canvas, label, x + 6 * s, y + 4 * s, 20 * s, 0xaaffffff, true);
