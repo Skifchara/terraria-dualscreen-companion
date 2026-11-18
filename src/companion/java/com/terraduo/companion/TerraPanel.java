@@ -81,6 +81,8 @@ final class TerraPanel extends View {
     private int bestiaryFilter;
     private JSONArray bestiaryList;
     private long lastBestiaryAsk;
+    private boolean searchOpen;
+    private final StringBuilder searchText = new StringBuilder();
     // mini tooltip while an item is held (like the game's hover tooltip)
     private int tipGroup = -1, tipIndex = -1;
     private boolean tipWanted, tipWasShown;
@@ -712,6 +714,8 @@ final class TerraPanel extends View {
             drawCentered(canvas, Strings.get("open_world"), w / 2f, h / 2f, 34 * s, INK);
         } else if (chatOpen) {
             drawChat(canvas, w, h, s);
+        } else if (searchOpen) {
+            drawSearch(canvas, w, h, s);
         } else if (recipeViewOpen) {
             drawRecipeView(canvas, w, h, s);
         } else if (bstOpenId >= 0) {
@@ -1293,6 +1297,12 @@ final class TerraPanel extends View {
         }
         drawText(canvas, Strings.get("coins_ammo"), 30 * s, y + 4 * s, 28 * s, MUTED, true);
         float bx = w - 30 * s;
+        if (!interactionPane) {
+            boolean active = searchText.length() > 0;
+            String label = active ? searchText.toString() : Strings.get("search");
+            button(canvas, "search_open", label, 300 * s, y - 2 * s, active ? 300 * s : 270 * s, 62 * s, active ? 0xff347461 : 0xff2a3a6a, s);
+            if (active) button(canvas, "search_clear", "x", 604 * s, y - 2 * s, 80 * s, 62 * s, 0xff7a2a2f, s);
+        }
         button(canvas, "sort", Strings.get("sort"), bx - 190 * s, y - 2 * s, 190 * s, 62 * s, 0xff2a3a6a, s);
         if (!interactionPane) {
             button(canvas, "quickstack", Strings.get("quick_stack"), bx - 190 * s - 12 * s - 280 * s, y - 2 * s, 280 * s, 62 * s,
@@ -1549,6 +1559,31 @@ final class TerraPanel extends View {
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
         refresh.run();
         postInvalidate();
+    }
+
+    /** Item search: a keyboard panel at the bottom; the inventory above dims every item whose name does not contain the text. */
+    private void drawSearch(Canvas canvas, int w, int h, float s) {
+        hits.clear();
+        Hit outside = new Hit();
+        outside.type = 9;
+        outside.rect.set(0, 0, w, h);
+        hits.add(outside);
+        float left = 16 * s;
+        float right = w - 16 * s;
+        float top = h - (72 + 5 * 74 + 36) * s;
+        panel(canvas, left, top, right, h - 10 * s, 0xf0101a38, 0xff8ea2d8, s);
+        Hit body = new Hit();
+        body.type = 8;
+        body.rect.set(left, top, right, h - 10 * s);
+        hits.add(body);
+        float inputTop = top + 14 * s;
+        panel(canvas, left + 16 * s, inputTop, right - 16 * s - 150 * s, inputTop + 64 * s, 0xcc060b1a, 0xff5a6ea8, s);
+        boolean cursor = (SystemClock.uptimeMillis() / 500) % 2 == 0;
+        String shown = searchText.length() == 0 ? Strings.get("search_hint") : searchText.toString() + (cursor ? "|" : "");
+        drawText(canvas, shown, left + 40 * s, inputTop + 16 * s, fitText(shown, 32 * s, right - left - 340 * s),
+            searchText.length() == 0 ? MUTED : INK, true);
+        button(canvas, "search_clear", Strings.get("search_clear"), right - 16 * s - 140 * s, inputTop, 140 * s, 64 * s, 0xff7a2a2f, s);
+        drawKeyboard(canvas, w, s, left, right, inputTop + 72 * s);
     }
 
     /** The game-style mini tooltip above the finger: name, stats, the game's own lines and reforge changes. */
@@ -2082,15 +2117,19 @@ final class TerraPanel extends View {
         }
         if (name.startsWith("key_")) {
             String key = name.substring(4);
+            StringBuilder target = searchOpen ? searchText : chatInput;
             switch (key) {
-                case "back": if (chatInput.length() > 0) chatInput.setLength(chatInput.length() - 1); break;
-                case "space": if (chatInput.length() < 240) chatInput.append(' '); break;
+                case "back": if (target.length() > 0) target.setLength(target.length() - 1); break;
+                case "space": if (target.length() < 240) target.append(' '); break;
                 case "shift": keyShift = !keyShift; break;
                 case "lang": keyLayout = (keyLayout + 1) % KEYS.length; break;
-                case "send": sendChatInput(); break;
+                case "send":
+                    if (searchOpen) searchOpen = false;
+                    else sendChatInput();
+                    break;
                 default:
-                    if (chatInput.length() < 240) {
-                        chatInput.append(keyShift ? key.toUpperCase() : key);
+                    if (target.length() < 240) {
+                        target.append(keyShift ? key.toUpperCase() : key);
                         keyShift = false;
                     }
                     break;
@@ -2166,8 +2205,11 @@ final class TerraPanel extends View {
         float textSize = fitText(shown + (cursor ? "|" : ""), 32 * s, right - left - 100 * s);
         drawText(canvas, chatInput.length() == 0 ? shown : shown + (cursor ? "|" : ""), left + 40 * s, inputTop + 16 * s, textSize,
             chatInput.length() == 0 ? MUTED : INK, true);
-        // keyboard
-        float ky = inputTop + 72 * s;
+        drawKeyboard(canvas, w, s, left, right, inputTop + 72 * s);
+    }
+
+    /** The on-screen keyboard (shared by chat and item search); keys are "key_*" buttons handled in {@link #chatButton}. */
+    private void drawKeyboard(Canvas canvas, int w, float s, float left, float right, float ky) {
         float keyGap = 6 * s;
         String[] rows = KEYS[keyLayout];
         for (int row = 0; row < rows.length; row++) {
@@ -2198,7 +2240,7 @@ final class TerraPanel extends View {
         kx += unit * 2.4f + keyGap;
         button(canvas, "key_back", "<-", kx, ky, unit * 1.3f, 68 * s, 0xff2a3a6a, s);
         kx += unit * 1.3f + keyGap;
-        button(canvas, "key_send", Strings.get("chat_send"), kx, ky, unit * 1.9f, 68 * s, 0xff347461, s);
+        button(canvas, "key_send", Strings.get(searchOpen ? "search_done" : "chat_send"), kx, ky, unit * 1.9f, 68 * s, 0xff347461, s);
     }
 
     private void drawEmotes(Canvas canvas, int w, float s, float top, float bottom) {
@@ -2711,6 +2753,11 @@ final class TerraPanel extends View {
         if (inventoryFilter != 0 && pane == 0 && group == 0 && index >= 10 && index < 50 && data != null && typeOf(data) != 0
             && data.optInt(5) != inventoryFilter) {
             fill.setColor(0xb0060b1a);
+            canvas.drawRect(x, y, x + size, y + size, fill);
+        }
+        if (searchText.length() > 0 && pane == 0 && (group == 0 || group == 5) && data != null && typeOf(data) != 0
+            && !data.optString(4).toLowerCase(java.util.Locale.ROOT).contains(searchText.toString().toLowerCase(java.util.Locale.ROOT))) {
+            fill.setColor(0xc0060b1a);
             canvas.drawRect(x, y, x + size, y + size, fill);
         }
         if (data != null && typeOf(data) == 0 && label != null) {
@@ -3509,7 +3556,7 @@ final class TerraPanel extends View {
                 break;
             case 3: selectedRecipe = hit.index; break;
             case 5: shopSelection = hit.index; break;
-            case 9: sheetOpen = false; recipeViewOpen = false; bstOpenId = -1; splitMode = 0; sound("close"); break;
+            case 9: sheetOpen = false; recipeViewOpen = false; bstOpenId = -1; searchOpen = false; splitMode = 0; sound("close"); break;
             case 4: break;
             case 8: break;
             default: tapSlot(hit, longPress); break;
@@ -3661,6 +3708,15 @@ final class TerraPanel extends View {
                 feedbackLocal = true;
                 feedbackUntil = SystemClock.uptimeMillis() + 2600;
             }
+            return;
+        }
+        if (name.equals("search_open")) {
+            searchOpen = true;
+            sound("open");
+            return;
+        }
+        if (name.equals("search_clear")) {
+            searchText.setLength(0);
             return;
         }
         if (name.startsWith("ptab_")) {
