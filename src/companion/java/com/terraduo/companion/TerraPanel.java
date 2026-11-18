@@ -82,7 +82,10 @@ final class TerraPanel extends View {
     private JSONArray bestiaryList;
     private long lastBestiaryAsk;
     private boolean searchOpen;
-    private final StringBuilder searchText = new StringBuilder();
+    private final StringBuilder searchText = new StringBuilder();      // inventory
+    private final StringBuilder craftQuery = new StringBuilder();       // recipes
+    private final StringBuilder bestiaryQuery = new StringBuilder();    // bestiary
+    private StringBuilder searchTarget = searchText;
     // mini tooltip while an item is held (like the game's hover tooltip)
     private int tipGroup = -1, tipIndex = -1;
     private boolean tipWanted, tipWasShown;
@@ -276,6 +279,7 @@ final class TerraPanel extends View {
         if (preloadPane < 0 && pane == 2 && craftTab == 2) requestedPane = 0;   // the item picker needs the whole inventory
         Json.put(result, "pane", PANES[requestedPane == INTERACTION ? 0 : requestedPane]);
         Json.put(result, "page", preloadPane >= 0 ? 0 : recipePage);
+        if (craftQuery.length() > 0) Json.put(result, "query", craftQuery.toString());
         preloadPane = -1;
         Json.put(result, "hide", hideRequested);
         JSONObject openChest = chest();
@@ -1596,9 +1600,9 @@ final class TerraPanel extends View {
         float inputTop = top + 14 * s;
         panel(canvas, left + 16 * s, inputTop, right - 16 * s - 150 * s, inputTop + 64 * s, 0xcc060b1a, 0xff5a6ea8, s);
         boolean cursor = (SystemClock.uptimeMillis() / 500) % 2 == 0;
-        String shown = searchText.length() == 0 ? Strings.get("search_hint") : searchText.toString() + (cursor ? "|" : "");
+        String shown = searchTarget.length() == 0 ? Strings.get("search_hint") : searchTarget.toString() + (cursor ? "|" : "");
         drawText(canvas, shown, left + 40 * s, inputTop + 16 * s, fitText(shown, 32 * s, right - left - 340 * s),
-            searchText.length() == 0 ? MUTED : INK, true);
+            searchTarget.length() == 0 ? MUTED : INK, true);
         button(canvas, "search_clear", Strings.get("search_clear"), right - 16 * s - 140 * s, inputTop, 140 * s, 64 * s, 0xff7a2a2f, s);
         drawKeyboard(canvas, w, s, left, right, inputTop + 72 * s);
     }
@@ -1764,7 +1768,10 @@ final class TerraPanel extends View {
         fill.setColor(0xff43c970);
         canvas.drawRect(30 * s, y + 36 * s, 30 * s + barW * (total == 0 ? 0 : found / (float) total), y + 52 * s, fill);
         String habitat = Strings.get("bst_habitat") + ": " + (bestiaryBiome < 0 || bestiaryTags.isEmpty() ? Strings.get("bst_any") : bestiaryTags.get(bestiaryBiome));
-        button(canvas, "bbiome", habitat, w - 30 * s - 520 * s, y - 4 * s, 520 * s, 60 * s, bestiaryBiome < 0 ? 0xff2a3a6a : 0xff347461, s);
+        button(canvas, "bbiome", habitat, w - 30 * s - 350 * s, y - 4 * s, 350 * s, 60 * s, bestiaryBiome < 0 ? 0xff2a3a6a : 0xff347461, s);
+        boolean searching = bestiaryQuery.length() > 0;
+        button(canvas, searching ? "search_clear_bst" : "search_open_bst", searching ? bestiaryQuery.toString() + "  x" : Strings.get("search"),
+            340 * s, y - 4 * s, 250 * s, 60 * s, searching ? 0xff347461 : 0xff2a3a6a, s);
         y += 74 * s;
         int columns = 5;
         float cardW = (w - 60 * s - (columns - 1) * gap) / columns;
@@ -1777,6 +1784,8 @@ final class TerraPanel extends View {
             if (entry == null) continue;
             if (bestiaryFilter != 0 && entry.optInt(5) != BESTIARY_KIND[bestiaryFilter]) continue;
             if (bestiaryFoundOnly && entry.optInt(3) == 0) continue;
+            if (bestiaryQuery.length() > 0 && (entry.optInt(3) == 0 || !entry.optString(1).toLowerCase(java.util.Locale.ROOT)
+                .contains(bestiaryQuery.toString().toLowerCase(java.util.Locale.ROOT)))) continue;
             if (bestiaryBiome >= 0 && bestiaryTags != null && bestiaryBiome < bestiaryTags.size()) {
                 JSONArray tags = entry.optJSONArray(9);
                 boolean match = false;
@@ -2134,7 +2143,8 @@ final class TerraPanel extends View {
         }
         if (name.startsWith("key_")) {
             String key = name.substring(4);
-            StringBuilder target = searchOpen ? searchText : chatInput;
+            StringBuilder target = searchOpen ? searchTarget : chatInput;
+            if (searchOpen && searchTarget == craftQuery) recipePage = 0;
             switch (key) {
                 case "back": if (target.length() > 0) target.setLength(target.length() - 1); break;
                 case "space": if (target.length() < 240) target.append(' '); break;
@@ -2440,6 +2450,9 @@ final class TerraPanel extends View {
         JSONArray entries = list == null ? null : list.optJSONArray("entries");
         if (entries == null || entries.length() == 0) {
             drawCentered(canvas, Strings.get("no_recipes"), w / 2f, (top + bottom) / 2, 34 * s, MUTED);
+            if (craftQuery.length() > 0) {
+                button(canvas, "search_clear_craft", craftQuery.toString() + "  x", w / 2f - 190 * s, (top + bottom) / 2 + 40 * s, 380 * s, 64 * s, 0xff347461, s);
+            }
             return;
         }
         if (selectedRecipe < 0 || findRecipe(entries, selectedRecipe) == null) {
@@ -2479,12 +2492,14 @@ final class TerraPanel extends View {
         canvas.restore();
         int rows = (entries.length() + columns - 1) / columns;
         neededHeight = Math.max(neededHeight, rows * (cell + 6 * s) + 20 * s);
+        float footerY = bottom - 64 * s;
+        boolean querying = craftQuery.length() > 0;
+        button(canvas, querying ? "search_clear_craft" : "search_open_craft", querying ? craftQuery.toString() + "  x" : Strings.get("search"),
+            30 * s, footerY, 190 * s, 64 * s, querying ? 0xff347461 : 0xff2a3a6a, s);
         if (total > 24) {
-            float px = 30 * s;
-            float py = bottom - 64 * s;
-            button(canvas, "prev", "‹", px, py, 100 * s, 64 * s, recipePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
-            drawCentered(canvas, Strings.get("page") + " " + (recipePage + 1), listWidth / 2 + 10 * s, py + 26 * s, 24 * s, INK);
-            button(canvas, "next", "›", listWidth - 120 * s, py, 100 * s, 64 * s, (recipePage + 1) * 24 < total ? 0xff2a3a6a : 0xff1a2238, s);
+            button(canvas, "prev", "‹", 230 * s, footerY, 80 * s, 64 * s, recipePage > 0 ? 0xff2a3a6a : 0xff1a2238, s);
+            drawCentered(canvas, Strings.get("page") + " " + (recipePage + 1), (310 * s + listWidth - 100 * s) / 2, footerY + 26 * s, 22 * s, INK);
+            button(canvas, "next", "›", listWidth - 100 * s, footerY, 80 * s, 64 * s, (recipePage + 1) * 24 < total ? 0xff2a3a6a : 0xff1a2238, s);
         }
         float dx = listWidth + 16 * s;
         float dw = w - dx - 18 * s;
@@ -2695,7 +2710,7 @@ final class TerraPanel extends View {
     }
 
     /** The mod protocol this app needs (see PROTOCOL in the mod's main.js). */
-    private static final int EXPECTED_PROTOCOL = 2;
+    private static final int EXPECTED_PROTOCOL = 3;
 
     private boolean feedbackActive() {
         return !feedback.isEmpty() && SystemClock.uptimeMillis() < feedbackUntil;
@@ -3740,13 +3755,24 @@ final class TerraPanel extends View {
             }
             return;
         }
-        if (name.equals("search_open")) {
+        if (name.startsWith("search_open")) {
+            searchTarget = name.equals("search_open_craft") ? craftQuery : name.equals("search_open_bst") ? bestiaryQuery : searchText;
             searchOpen = true;
             sound("open");
             return;
         }
         if (name.equals("search_clear")) {
-            searchText.setLength(0);
+            searchTarget.setLength(0);
+            recipePage = 0;
+            return;
+        }
+        if (name.equals("search_clear_craft")) {
+            craftQuery.setLength(0);
+            recipePage = 0;
+            return;
+        }
+        if (name.equals("search_clear_bst")) {
+            bestiaryQuery.setLength(0);
             return;
         }
         if (name.startsWith("ptab_")) {

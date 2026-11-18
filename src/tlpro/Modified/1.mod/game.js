@@ -320,6 +320,22 @@ function readBanners() {
     return result;
 }
 
+// Text typed into the companion's recipe search; only recipes whose result name contains it are listed.
+let recipeQuery = "";
+const recipeNames = new Map();
+
+function setRecipeQuery(text) {
+    recipeQuery = typeof text === "string" ? text.trim().toLowerCase().slice(0, 40) : "";
+}
+
+function resultName(recipe) {
+    const type = recipe.createItem.type;
+    if (!recipeNames.has(type)) {
+        recipeNames.set(type, String(safe(() => recipe.createItem.get_Name(), "")).toLowerCase());
+    }
+    return recipeNames.get(type);
+}
+
 function readRecipes(page) {
     refreshRecipes();
     const player = Main.get_LocalPlayer();
@@ -327,13 +343,19 @@ function readRecipes(page) {
     const count = Main.get_numAvailableRecipes();
     const recipes = Main.recipe;
     const result = [];
-    const total = Math.min(count, indices.length);
+    let ids = [];
+    for (let index = 0; index < Math.min(count, indices.length); index++) {
+        const id = indices[index];
+        if (!recipeQuery || (recipes[id] && resultName(recipes[id]).includes(recipeQuery))) {
+            ids.push(id);
+        }
+    }
+    const total = ids.length;
     const offset = Math.min(Math.floor(Math.max(0, total - 1) / 24), page) * 24;
     for (let index = offset; index < Math.min(offset + 24, total); index++) {
-        const id = indices[index];
-        const recipe = recipes[id];
+        const recipe = recipes[ids[index]];
         if (recipe) {
-            result.push(describeRecipe(id, recipe, player));
+            result.push(describeRecipe(ids[index], recipe, player));
         }
     }
     return { entries: result, total, page: offset / 24, focus: safe(() => Main.get_focusRecipe(), -1) };
@@ -951,4 +973,4 @@ function backgrounds() {
     return result;
 }
 
-export { bestiaryPendingCount, bestiaryInfo, readBestiary, toggleHidden, applyHidden, readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };
+export { setRecipeQuery, bestiaryPendingCount, bestiaryInfo, readBestiary, toggleHidden, applyHidden, readChat, sendChat, sendEmote, recipesFor, setHousing, Main, snapshot, select, transfer, craft, backgrounds, slots, slotRef, sameItem, refreshRecipes, playSound };

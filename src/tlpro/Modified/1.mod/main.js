@@ -11,7 +11,7 @@ const Type = new NativeClass("System", "Type");
 const Enum = new NativeClass("System", "Enum");
 const port = 38656;
 // Bumped whenever the companion needs something the older mod does not do; the app warns when the running mod is older.
-const PROTOCOL = 2;
+const PROTOCOL = 3;
 // Development switch: the diagnostic ops below (raw sprite dumps, renders, class probes) are off in released builds so the loopback
 // port exposes only what the companion needs. Set to true while working on the mod.
 const DEBUG = false;
@@ -145,6 +145,7 @@ function readRequest() {
 }
 
 function respond(player, request, error, mapState) {
+    game.setRecipeQuery(request.query);
     const state = game.snapshot(player, request.pane, request.page);
     if (request.legacy) {
         const slots = state.inventory.slice(0, 2).map(([type, stack, prefix]) => ({ type, stack, prefix }));
