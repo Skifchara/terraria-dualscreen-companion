@@ -45,6 +45,14 @@ UI believes is in the slot (`expectFrom` / `expectTo`) and the mod refuses if th
 - `SpriteStore` — crops sprites from the locally decoded atlas pages (stitching per-frame tiles of tall sprites), background
   thread, memory + disk cache; cache folders of older versions are removed on start.
 - `BiomeScene` — the backdrop: real parallax layers and cave textures with cross-fades, weather, vignette, lightning.
+- `SetupActivity` — the launcher screen and all-in-one installer: checks Terraria / TL Pro, runs `SpriteExtractor`, hands the mod pack
+  to TL Pro (`ModProvider` serves the `.tl` stored in the app's assets to TL Pro's `.tl` VIEW handler) and shows live whether the
+  mod answers (`ModLink`). Once everything is in place it forwards straight to the companion.
+- `SpriteExtractor` (+ `UnityBundle`, `UnityAssets`, `Lz4`, `Png`) — decodes the game's atlases, fonts and backgrounds from the installed
+  APK on the device: a UnityFS reader with random access to the LZ4 blocks of data.unity3d (750 MB uncompressed, never fully
+  unpacked), serialized file parsing (format 22, Texture2D / TextAsset / ResourceManager) and the same palette composition as
+  the Python tools. These classes have no Android dependency; `tests/java/.../ExtractCheck.java` runs them on a PC and compares every
+  PNG with the Python output.
 - `MapCache` — permanent per-world map chunks. `Strings` — English / Russian / Spanish / Polish text. `GameFont` — the game's
   bitmap font from decoded glyph sheets. `Json` — tiny helpers.
 

@@ -63,16 +63,14 @@ loopback and renders everything on one canvas. Details: [docs/ARCHITECTURE.md](d
 
 ## Quick start
 
-1. Install Terraria (Google Play) and TL Pro. Back up your saves. Turn on USB debugging on the device and plug it into a PC.
-2. Download `Terraduo-Companion-<version>-installer.zip` from the [Releases](../../releases) page, unpack it and run
-   **`Install.bat`** (Windows) or `python3 tools/install.py` (macOS / Linux). It installs the app (signed with a development key),
-   copies the mod pack to the device and decodes the sprites from **your own** installed Terraria. It asks before downloading
-   Google's adb or removing anything.
-3. In TL Pro import `Download/Terraduo-Companion-mod-*.tl` and enable the pack. Restart the game through TL Pro after every mod update.
-4. Start a single-player world, open **Terraduo Companion** — it opens on the bottom screen by itself.
+Everything happens on the device, no PC needed:
 
-Only want the app? Install `Terraduo-Companion-<version>.apk` directly; without the sprite step it draws plain frames.
-Manual steps are in the [guide](docs/GUIDE_EN.txt).
+1. Install Terraria (Google Play) and TL Pro. Back up your saves.
+2. Install `Terraduo-Companion-<version>.apk` from the [Releases](../../releases) page (allow "install unknown apps"; it is signed with a development key).
+3. Open **Terraduo Companion**. Its setup screen checks that Terraria and TL Pro are installed, **decodes the sprites from your own copy of Terraria on the device** (about a minute, nothing leaves the device) and **sends the mod pack to TL Pro** (tap *Yes* in TL Pro's import dialog). It also shows live whether the mod answers inside the game.
+4. In TL Pro enable the pack "Terraduo Companion" for your single-player profile, start Terraria from TL Pro (restart it after every mod update), open a world and tap **Open the companion**. From then on the app icon opens the companion on the bottom screen directly; *Setup* is in the language menu.
+
+Prefer a PC? `Terraduo-Companion-<version>-installer.zip` still contains `Install.bat` / `tools/install.py`, which do the same through adb. Manual steps are in the [guide](docs/GUIDE_EN.txt).
 
 ## Building
 

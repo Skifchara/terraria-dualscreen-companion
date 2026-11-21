@@ -56,6 +56,10 @@ python tools/release.py --check
 python tools/build.py
 ```
 
+The on-device sprite decoder can be checked against the Python tools on a PC (needs your own installed Terraria APK and the Python output
+in `assets-cache`): compile `Lz4, UnityBundle, UnityAssets, Png, SpriteExtractor` together with `tests/java/com/terraduo/companion/ExtractCheck.java`
+and run `ExtractCheck <base.apk> <out dir> <assets-cache/atlas> <assets-cache/backgrounds>`; it must report 0 differences.
+
 While working on the mod set `DEBUG = true` in `src/tlpro/Modified/1.mod/main.js` to enable the diagnostic operations (and set it back before a release).
 
 ## Pull requests

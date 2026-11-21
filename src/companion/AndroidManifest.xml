@@ -12,16 +12,28 @@
     <application
         android:label="Terraduo Companion"
         android:icon="@mipmap/ic_launcher"
+        android:largeHeap="true"
         android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
         <activity
-            android:name=".TlProActivity"
+            android:name=".SetupActivity"
             android:label="Terraduo Companion"
             android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".TlProActivity"
+            android:label="Terraduo Companion"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density" />
+        <provider
+            android:name=".ModProvider"
+            android:authorities="com.terraduo.companion.mod"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

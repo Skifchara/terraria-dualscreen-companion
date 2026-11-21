@@ -64,10 +64,15 @@ def build_companion():
     os.makedirs(os.path.join(work, "classes"))
     base = os.path.join(work, "base.apk")
     compiled = os.path.join(work, "res.zip")
+    # the TL Pro mod pack travels inside the app (the setup screen hands it to TL Pro)
+    subprocess.check_call([sys.executable, os.path.join(ROOT, "tools", "build_tlpro.py")], stdout=subprocess.DEVNULL)
+    assets = os.path.join(work, "assets")
+    os.makedirs(assets)
+    shutil.copy(os.path.join(BUILD, "terraduo-hotbar.tl"), os.path.join(assets, "terraduo-mod.tl"))
     run([os.path.join(BT, exe("aapt2")), "compile", "--dir", os.path.join(src, "res"), "-o", compiled])
     run([os.path.join(BT, exe("aapt2")), "link", "-o", base, "-I", ANDROID_JAR,
          "--manifest", os.path.join(src, "AndroidManifest.xml"), "--min-sdk-version", "26",
-         "--target-sdk-version", "33", compiled])
+         "--target-sdk-version", "33", "-A", assets, compiled])
     java = glob.glob(os.path.join(src, "java", "**", "*.java"), recursive=True)
     run([jdk("javac"), "--release", "8", "-Xlint:-options", "-g:none", "-cp", ANDROID_JAR,
          "-d", os.path.join(work, "classes")] + java)

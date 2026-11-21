@@ -42,3 +42,8 @@ jobs:
         run: node tests/mod_load.mjs
       - name: Text and message tables are complete
         run: python tests/test_strings.py
+      - name: On-device sprite decoder compiles (no Android needed)
+        run: |
+          mkdir -p /tmp/unity
+          S=src/companion/java/com/terraduo/companion
+          javac --release 8 -d /tmp/unity $S/Lz4.java $S/UnityBundle.java $S/UnityAssets.java $S/Png.java $S/SpriteExtractor.java tests/java/com/terraduo/companion/ExtractCheck.java

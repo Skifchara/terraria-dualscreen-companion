@@ -2713,7 +2713,7 @@ final class TerraPanel extends View {
     }
 
     /** The mod protocol this app needs (see PROTOCOL in the mod's main.js). */
-    private static final int EXPECTED_PROTOCOL = 4;
+    static final int EXPECTED_PROTOCOL = 4;
 
     private boolean feedbackActive() {
         return !feedback.isEmpty() && SystemClock.uptimeMillis() < feedbackUntil;
@@ -3212,8 +3212,8 @@ final class TerraPanel extends View {
         addButtonHit("dismiss_overlay", 0, 0, w, h);
         float width = 470 * s;
         float left = (w - width) / 2;
-        float top = (h - 480 * s) / 2;
-        panel(canvas, left, top, left + width, top + 480 * s, 0xf0101a38, 0xff8ea2d8, s);
+        float top = (h - 540 * s) / 2;
+        panel(canvas, left, top, left + width, top + 540 * s, 0xf0101a38, 0xff8ea2d8, s);
         String version = "?";
         try {
             version = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0).versionName;
@@ -3222,7 +3222,8 @@ final class TerraPanel extends View {
         }
         String diag = String.format(java.util.Locale.ROOT, Strings.get("diag_line"), version,
             latest == null ? "-" : Integer.toString(latest.optInt("proto", 0)), Integer.toString(sprites.atlasPages()));
-        drawCentered(canvas, diag, w / 2f, top + 452 * s, fitText(diag, 20 * s, width - 30 * s), MUTED);
+        drawCentered(canvas, diag, w / 2f, top + 512 * s, fitText(diag, 20 * s, width - 30 * s), MUTED);
+        button(canvas, "open_setup", Strings.get("setup_btn"), left + 26 * s, top + 408 * s, width - 52 * s, 64 * s, 0xff2a3a6a, s);
         drawCentered(canvas, Strings.get("language"), w / 2f, top + 36 * s, 31 * s, GOLD);
         String current = prefs.getString("lang", "auto");
         languageOption(canvas, "auto", Strings.get("language_auto"), current, left, top + 72 * s, width, s);
@@ -3905,6 +3906,11 @@ final class TerraPanel extends View {
         }
         if (name.startsWith("shop_")) {
             trade(name.substring(5), -1);
+            return;
+        }
+        if (name.equals("open_setup")) {
+            languagePicker = false;
+            getContext().startActivity(new android.content.Intent(getContext(), SetupActivity.class).putExtra("force", true));
             return;
         }
         if (name.startsWith("language_")) {

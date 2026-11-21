@@ -10,7 +10,12 @@ TERRADUO COMPANION  -  USER GUIDE (English)
      (needed once for step 4).
    * Back up your saves first (Android/data/com.and.games505.TerrariaPaid/files/).
 
-QUICK WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat (Windows) or
+EASIEST WAY (no PC): install Terraduo-Companion-<version>.apk and open it. The setup screen decodes the sprites from your own
+   Terraria on the device, hands the mod pack to TL Pro (tap Yes in its import dialog) and shows live whether the mod answers in
+   the game. Then enable the pack "Terraduo Companion" in TL Pro, start Terraria from TL Pro and press "Open the companion".
+   The setup screen can be opened again from the language menu (top bar, EN button).
+
+PC WAY: unpack Terraduo-Companion-<version>-installer.zip and run Install.bat (Windows) or
    "python3 tools/install.py" (macOS / Linux) with the device connected over USB. It does steps 2, 3 (copying
    the file to Download) and 4 below for you. The numbered steps are the manual way.
 

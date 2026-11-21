@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **All-in-one installer, no PC needed.** The app opens a setup screen: it checks that Terraria and TL Pro are installed, decodes the game's
+  sprites, fonts and backgrounds from your own installed Terraria on the device (a UnityFS reader written for the purpose; the output is
+  pixel-identical to the Python tools' and takes seconds), hands the mod pack that travels inside the app to TL Pro (TL Pro asks to
+  import / replace the pack) and shows live whether the mod answers in the running game. When all is in place the icon opens the companion
+  directly; *Setup* stays reachable from the language menu. The PC installer and tools remain as an alternative.
+
 ## 1.0.8 (pre-release)
 
 - Release tooling: `tools/release.py` keeps manifest, TL Pro pack version and CHANGELOG in step (the pack version had stayed at 9

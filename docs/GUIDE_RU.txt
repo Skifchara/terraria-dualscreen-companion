@@ -10,7 +10,12 @@ TERRADUO COMPANION  -  РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ (по-р�
      (нужно один раз для шага 4).
    * Сделайте резервную копию сохранений (Android/data/com.and.games505.TerrariaPaid/files/).
 
-БЫСТРЫЙ ПУТЬ: распакуйте Terraduo-Companion-<версия>-installer.zip и запустите Install.bat (Windows) или
+САМЫЙ ПРОСТОЙ ПУТЬ (без ПК): установите Terraduo-Companion-<версия>.apk и откройте его. Экран настройки расшифрует спрайты из вашей
+   Terraria на устройстве, передаст пакет мода в TL Pro (нажмите Yes в его окне импорта) и покажет вживую, отвечает ли мод в игре.
+   Затем включите пакет «Terraduo Companion» в TL Pro, запустите Terraria через TL Pro и нажмите «Open the companion».
+   Экран настройки снова открывается из меню языка (верхняя панель, кнопка EN).
+
+ПУТЬ ЧЕРЕЗ ПК: распакуйте Terraduo-Companion-<версия>-installer.zip и запустите Install.bat (Windows) или
    "python3 tools/install.py" (macOS / Linux) при подключённом по USB устройстве. Он сделает шаги 2, 3 (копирование
    файла в Download) и 4. Шаги ниже — ручной путь.
 
