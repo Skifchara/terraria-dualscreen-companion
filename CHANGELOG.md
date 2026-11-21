@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.9 (pre-release)
 
 - **All-in-one installer, no PC needed.** The app opens a setup screen: it checks that Terraria and TL Pro are installed, decodes the game's
   sprites, fonts and backgrounds from your own installed Terraria on the device (a UnityFS reader written for the purpose; the output is
